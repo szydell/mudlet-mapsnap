@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"unicode/utf16"
 )
 
 // BinaryReader provides helper methods for reading binary data
@@ -78,35 +79,28 @@ func (br *BinaryReader) ReadString() (string, error) {
 }
 
 // ReadQString reads a Qt QString from QDataStream (Qt 5.x semantics)
-// Format: qint32 length; -1 means empty string; otherwise length is number of 16-bit QChars
-// Then follows length 16-bit big-endian code units (UTF-16BE)
+// Format: qint32 byteLength; -1 means empty string; otherwise byteLength is number of BYTES of UTF-16BE data
+// Then follows `byteLength` bytes (must be divisible by 2) representing 16-bit QChars (UTF-16BE)
 func (br *BinaryReader) ReadQString() (string, error) {
-	length, err := br.ReadInt32()
-	if err != nil {
+	// In Qt5 QDataStream, QString is serialized as quint32 byte length (or 0xFFFFFFFF for null),
+	// followed by that many bytes of UTF-16BE data.
+	var n uint32
+	if err := binary.Read(br.reader, binary.BigEndian, &n); err != nil {
 		return "", fmt.Errorf("reading QString length: %w", err)
 	}
-	if length == -1 { // empty string
+	br.pos += 4
+	if n == 0xFFFFFFFF {
 		return "", nil
 	}
-	if length < 0 || length > 10000000 { // increased limit for large maps
-		return "", fmt.Errorf("invalid QString length: %d", length)
+	if n%2 != 0 || n > 10000000 {
+		return "", fmt.Errorf("invalid QString byte length: %d", n)
 	}
-	// Read UTF-16BE code units
-	buf := make([]byte, 2*int(length))
-	if _, err := io.ReadFull(br.reader, buf); err != nil {
+	units := make([]uint16, int(n/2))
+	if err := binary.Read(br.reader, binary.BigEndian, &units); err != nil {
 		return "", fmt.Errorf("reading QString data: %w", err)
 	}
-	br.pos += len(buf)
- // Decode UTF-16BE to UTF-8 and truncate on NULL
-	out := make([]rune, 0, length)
-	for i := 0; i < len(buf); i += 2 {
-		code := uint16(buf[i])<<8 | uint16(buf[i+1])
-		if code == 0 { // Null terminator
-			break
-		}
-		out = append(out, rune(code))
-	}
-	return string(out), nil
+	br.pos += int(n)
+	return string(utf16.Decode(units)), nil
 }
 
 // ReadBool reads a boolean value (1 byte, 0 = false, non-zero = true)

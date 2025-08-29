@@ -108,7 +108,8 @@ W katalogu `docs/sources/Mudlet/` znajdują się kluczowe pliki z kodu źródło
 - **TMapLabel.cpp/TMapLabel.h** - etykiety na mapie
 - **T2DMap.cpp/T2DMap.h** - renderowanie 2D mapy
 
-Te pliki zawierają dokładną specyfikację formatu binarnego QDataStream używanego przez Mudleta.
+### qdatastream.go
+znajdziesz tu implementację QDataStream w formie pliku `qdatastream.go`. To dobra baza do zrozumienia formatu binarnego Qt.
 
 ### Node.js parser - działająca implementacja
 W katalogu `docs/sources/node-mudlet-map-binary-reader/` znajduje się działający parser Node.js:
@@ -127,11 +128,12 @@ W katalogu `docs/sources/node-mudlet-map-binary-reader/` znajduje się działaj�
 - Obszary (areas) to QMap<QInt, QString> z sortowaniem specjalnym (Default Area = -1 na początku)
 
 ### Format binarny - kluczowe informacje
-1. **QDataStream format** - Qt's binary serialization format, big-endian
-2. **QString encoding** - UTF-16BE z prefiksem długości (qint32)
-3. **QMap serialization** - count + pairs, with mudletSorter for areas (Default Area = -1 first)
-4. **MudletRoom structure** - 16 pól z exitami + environment, weight, name, userData, customLines itp.
-5. **Special exits** - kodowane jako QMultiMap<QUInt, QString> z prefiksami "0"/"1" dla lock status
+1. **QDataStream format** - Qt's binary serialization format, big-endian. MudletMap rozpoczyna się od qint32 `version` (np. 20). Brak magic stringa w trybie Qt; alternatywnie, w naszym projekcie wspieramy także legacy placeholder z magic "ATADNOOM" + 1‑bajtowa wersja dla testów. 
+2. **QString encoding** - UTF-16BE z prefiksem długości jako liczba BAJTÓW (quint32). Wartość 0xFFFFFFFF oznacza pusty (null) string. Po długości następuje dokładnie tyle bajtów (parzysta liczba), które dekodujemy jako UTF‑16BE. 
+3. **QMap serialization** - najpierw liczba elementów (qint32), następnie pary klucz→wartość; dla areaNames używany jest specjalny sorter Mudleta (Default Area = -1 pierwsze). 
+4. **MudletMap order (początkowa część)** - `version` → `envColors: QMap<int,int>` → `areaNames: QMap<int,QString>` → `mCustomEnvColors` → ... (patrz models w docs/sources/node-.../mudlet-models.js). 
+5. **MudletRoom structure** - 16 pól z exitami + environment, weight, name, userData, customLines itp. 
+6. **Special exits** - kodowane jako QMultiMap<QUInt, QString> z prefiksami "0"/"1" dla lock status
 
 ## 🗂️ Szczegółowa specyfikacja
 

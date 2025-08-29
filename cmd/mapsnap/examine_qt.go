@@ -91,15 +91,20 @@ func exQtQMapIntQString(r *mapparser.BinaryReader) error {
 	// Read count (QUInt)
 	sz, err := r.ReadInt32(); if err != nil { return err }
 	fmt.Printf("    areaNames count=%d\n", sz)
- for i:=0;i<int(sz);i++ {
+	for i:=0;i<int(sz);i++ {
 		fmt.Printf("    entry %d @%d begin\n", i, r.Position())
 		key, err := r.ReadInt32(); if err != nil { return err }
 		peek, _ := r.Peek(8)
 		if len(peek) >= 8 {
 			fmt.Printf("      key=%d next8=%02x %02x %02x %02x %02x %02x %02x %02x @%d\n", key, peek[0],peek[1],peek[2],peek[3],peek[4],peek[5],peek[6],peek[7], r.Position())
 		}
-		if _, err := r.ReadQString(); err != nil { return err }
-		fmt.Printf("      after QString @%d\n", r.Position())
+		// Manually read QString for instrumentation
+		// Read quint32 byte length
+		lenPeek, _ := r.Peek(4)
+		var byteLen uint32 = uint32(lenPeek[0])<<24 | uint32(lenPeek[1])<<16 | uint32(lenPeek[2])<<8 | uint32(lenPeek[3])
+		fmt.Printf("      QString byteLen (peek)=%d @%d\n", byteLen, r.Position())
+		str, err := r.ReadQString(); if err != nil { return err }
+		fmt.Printf("      QString value='%s' after QString @%d\n", str, r.Position())
 	}
 	return nil
 }
