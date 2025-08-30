@@ -684,3 +684,54 @@ if err := parseRoom(reader, version); err != nil {
 - Implementuj testy regresji dla różnych wersji map
 
 Ten kompletny plan powinien pozwolić na stworzenie funkcjonalnego i użytecznego narzędzia dla społeczności graczy Arkadii.
+
+
+
+## 📝 Aktualizacje: QDataStream i MudletLabel (2025-08-30)
+
+Poniższa sekcja dokumentuje praktyczne wnioski i pułapki wykryte podczas pracy nad examine-qt oraz parserem dużych map Mudleta (v20). Zostały zweryfikowane na plikach testowych: tests/fixtures/2_rooms_map/2lok.dat oraz tests/fixtures/large_maps/2025-05-27#15-06-15map.dat.
+
+- QString (Qt QDataStream):
+  - Długość zapisywana jest jako quint32 reprezentujący LICZBĘ BAJTÓW UTF-16BE, nie liczbę znaków.
+  - Wartość 0xFFFFFFFF oznacza null/empty string i powinna zwrócić pusty string (bez czytania kolejnych danych).
+  - Długość musi być parzysta (pełne 16-bitowe QChar). Nieprawidłowa długość sugeruje rozjechany strumień wcześniej w pliku.
+
+- MudletLabel (kolejność pól):
+  - Zgodnie z referencją Node.js (v20) i źródłami Mudleta etykieta serializuje się w kolejności:
+    1) id: int
+    2) pos: QVector3D → 3 x double
+    3) dummy1: double
+    4) dummy2: double
+    5) size: QPair<double,double> → 2 x double
+    6) text: QString
+    7) fgColor: QColor
+    8) bgColor: QColor
+    9) pixMap: QPixmap (często PNG inline)
+    10) noScaling: bool
+    11) showOnTop: bool
+  - Kluczowe: łącznie 7 odczytów double przed QString (3 + 2 + 2). Dodatkowy odczyt double rozjedzie strumień i spowoduje błędy QString.
+
+- QPixmap/Png w etykietach (krytyczna pułapka):
+  - Po polu QPixmap występują często dane PNG zaczynające się od magic 0x89504E47. Przy pomijaniu PNG należy skanować do znacznika 'IEND' (0x49 0x45 0x4E 0x44) i KONIECZNIE skonsumować również 4‑bajtowy CRC po IEND.
+  - W praktyce: po znalezieniu 'IEND' trzeba wykonać Skip(8) – 4 bajty IEND + 4 bajty CRC, aby ustawić pozycję dokładnie za obrazem. Samo zjedzenie 'IEND' pozostawia CRC, które rozbija kolejny odczyt (np. QString).
+
+- Examine-qt (diagnozowanie dużych plików):
+  - Wypisywanie offsetów @Position() przed/po kluczowych sekcjach bardzo pomaga zlokalizować rozjazdy.
+  - Jeżeli analiza etykiet jest problematyczna lub kosztowna, można:
+    - Użyć env MAPSNAP_SKIP_LABELS=1 w parserze, który skorzysta z heurystyki przeskoku do sekcji rooms.
+    - Ograniczyć diagnostykę (np. wypisywać peek 8 bajtów tylko dla kilku pierwszych etykiet).
+  - Nie zwiększaj defaultowego timeoutu > 30s. Mudlet wczytuje duże mapy ~1s; dłuższe czasy wskazują na błąd w parserze (np. nieskończone skanowanie PNG).
+
+- Wydajność i bezpieczeństwo strumienia:
+  - Zawsze owijaj io.Reader w bufio.Reader na wejściu parsera.
+  - Unikaj wielokrotnego “pełzania” po tych samych danych; przy skanowaniu PNG przesuwaj się o 1 bajt i sprawdzaj okno 4 bajtów.
+  - Waliduj sensowne zakresy (np. liczniki QMap/QList < rozsądny próg) zanim wejdziesz w pętle.
+
+- Flagi i zmienne ułatwiające debug:
+  - mapsnap -examine-qt -map <plik> – wypisuje strukturę QDataStream z offsetami.
+  - MAPSNAP_DEBUG=1 – parser wypisze wybrane etapy z pozycjami w strumieniu.
+  - MAPSNAP_SKIP_LABELS=1 – w parserze pominie ciężką sekcję etykiet, używając heurystyki odszukania początku rooms.
+
+Te zasady zostały już odzwierciedlone w kodzie:
+- cmd/mapsnap/examine_qt.go: poprawna liczba double w MudletLabel i skip PNG do IEND+CRC.
+- pkg/mapparser/parser.go: skipPNG również konsumuje CRC (IEND+CRC).

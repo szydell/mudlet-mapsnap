@@ -44,13 +44,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check if map file exists
+	// Check if a map file exists
 	if _, err := os.Stat(*mapFile); os.IsNotExist(err) {
 		fmt.Printf("Error: Map file not found: %s\n", *mapFile)
 		os.Exit(1)
 	}
 
-	// Examine file if requested
+	// Examine a file if requested
 	if *examine {
 		fmt.Printf("Examining map file: %s\n", *mapFile)
 		if err := ExamineFile(*mapFile); err != nil {
@@ -118,7 +118,7 @@ func main() {
 		fmt.Println("\nSample Rooms:")
 		count := 0
 		for id, room := range m.Rooms {
-			fmt.Printf("Room %d: %s at (%d,%d,%d) with %d exits\n", 
+			fmt.Printf("Room %d: %s at (%d,%d,%d) with %d exits\n",
 				id, room.Name, room.X, room.Y, room.Z, len(room.Exits))
 			count++
 			if count >= 5 {

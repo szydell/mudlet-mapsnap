@@ -1,0 +1,79 @@
+Detailed Description
+
+QString stores a string of 16-bit QChars, where each QChar corresponds to one UTF-16 code unit. (Unicode characters with code values above 65535 are stored using surrogate pairs, that is, two consecutive QChars.)
+
+Unicode is an international standard that supports most of the writing systems in use today. It is a superset of US-ASCII (ANSI X3.4-1986) and Latin-1 (ISO 8859-1), and all the US-ASCII/Latin-1 characters are available at the same code positions.
+
+Behind the scenes, QString uses implicit sharing (copy-on-write) to reduce memory usage and to avoid the needless copying of data. This also helps reduce the inherent overhead of storing 16-bit characters instead of 8-bit characters.
+
+In addition to QString, Qt also provides the QByteArray class to store raw bytes and traditional 8-bit '\0'-terminated strings. For most purposes, QString is the class you want to use. It is used throughout the Qt API, and the Unicode support ensures that your applications are easy to translate if you want to expand your application's market at some point. Two prominent cases where QByteArray is appropriate are when you need to store raw binary data, and when memory conservation is critical (like in embedded systems).
+Initializing a string
+
+One way to initialize a QString is to pass a const char * to its constructor. For example, the following code creates a QString of size 5 containing the data "Hello":
+
+QString str = "Hello";
+
+QString converts the const char * data into Unicode using the fromUtf8() function.
+
+In all of the QString functions that take const char * parameters, the const char * is interpreted as a classic C-style '\\0'-terminated string. Except where the function's name overtly indicates some other encoding, such const char * parameters are assumed to be encoded in UTF-8.
+
+You can also provide string data as an array of QChars:
+
+static const QChar data[4] = { 0x0055, 0x006e, 0x10e3, 0x03a3 };
+QString str(data, 4);
+
+QString makes a deep copy of the QChar data, so you can modify it later without experiencing side effects. You can avoid taking a deep copy of the character data by using QStringView or QString::fromRawData() instead.
+
+Another approach is to set the size of the string using resize() and to initialize the data character per character. QString uses 0-based indexes, just like C++ arrays. To access the character at a particular index position, you can use operator[](). On non-const strings, operator[]() returns a reference to a character that can be used on the left side of an assignment. For example:
+
+QString str;
+str.resize(4);
+
+str[0] = QChar('U');
+str[1] = QChar('n');
+str[2] = QChar(0x10e3);
+str[3] = QChar(0x03a3);
+
+For read-only access, an alternative syntax is to use the at() function:
+
+QString str;
+
+for (qsizetype i = 0; i < str.size(); ++i) {
+    if (str.at(i) >= QChar('a') && str.at(i) <= QChar('f'))
+        qDebug() << "Found character in range [a-f]";
+}
+
+The at() function can be faster than operator[]() because it never causes a deep copy to occur. Alternatively, use the first(), last(), or sliced() functions to extract several characters at a time.
+
+A QString can embed '\0' characters (QChar::Null). The size() function always returns the size of the whole string, including embedded '\0' characters.
+
+After a call to the resize() function, newly allocated characters have undefined values. To set all the characters in the string to a particular value, use the fill() function.
+
+QString provides dozens of overloads designed to simplify string usage. For example, if you want to compare a QString with a string literal, you can write code like this and it will work as expected:
+
+QString str;
+
+if (str == "auto" || str == "extern"
+        || str == "static" || str == "register") {
+    // ...
+}
+
+You can also pass string literals to functions that take QStrings as arguments, invoking the QString(const char *) constructor. Similarly, you can pass a QString to a function that takes a const char * argument using the qPrintable() macro, which returns the given QString as a const char *. This is equivalent to calling toLocal8Bit().constData() on the QString.
+Manipulating string data
+
+QString provides the following basic functions for modifying the character data: append(), prepend(), insert(), replace(), and remove(). For example:
+
+QString str = "and";
+str.prepend("rock ");     // str == "rock and"
+str.append(" roll");        // str == "rock and roll"
+str.replace(5, 3, "&");   // str == "rock & roll"
+
+In the above example, the replace() function's first two arguments are the position from which to start replacing and the number of characters that should be replaced.
+
+When data-modifying functions increase the size of the string, QString may reallocate the memory in which it holds its data. When this happens, QString expands by more than it immediately needs so as to have space for further expansion without reallocation until the size of the string has significantly increased.
+
+The insert(), remove(), and, when replacing a sub-string with one of different size, replace() functions can be slow (linear time) for large strings because they require moving many characters in the string by at least one position in memory.
+
+If you are building a QString gradually and know in advance approximately how many characters the QString will contain, you can call reserve(), asking QString to preallocate a certain amount of memory. You can also call capacity() to find out how much memory the QString actually has allocated.
+
+QString provides STL-style iterators (QString::const_iterator and QString::iterator). In practice, iterators are handy when working with generic algorithms provided by the C++ standard library.

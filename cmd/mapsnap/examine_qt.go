@@ -186,21 +186,53 @@ func exQtMudletAreas(r *mapparser.BinaryReader) error {
 	for i:=0;i<int(sz);i++ { if _, err := r.ReadInt32(); err != nil { return err }; if err := exQtMudletArea(r); err != nil { return err } }
 	return nil
 }
+var exQtLabelDebugCount int
 func exQtMudletLabel(r *mapparser.BinaryReader) error {
 	if _, err := r.ReadInt32(); err != nil { return err }
 	for i:=0;i<3;i++ { if _, err := r.ReadDouble(); err != nil { return err } }
-	if _, err := r.ReadDouble(); err != nil { return err }
-	if _, err := r.ReadDouble(); err != nil { return err }
-	if _, err := r.ReadDouble(); err != nil { return err }
-	if _, err := r.ReadDouble(); err != nil { return err }
-	if _, err := r.ReadQString(); err != nil { return err }
+	// dummy1, dummy2
+ for i:=0;i<2;i++ { if _, err := r.ReadDouble(); err != nil { return err } }
+	// size: QPair<double,double>
+	for i:=0;i<2;i++ { if _, err := r.ReadDouble(); err != nil { return err } }
+	if exQtLabelDebugCount < 2 {
+		if peek, _ := r.Peek(8); len(peek) == 8 {
+			fmt.Printf("      pre-QString next8=%02x %02x %02x %02x %02x %02x %02x %02x @%d\n", peek[0],peek[1],peek[2],peek[3],peek[4],peek[5],peek[6],peek[7], r.Position())
+		}
+	}
+	str, err := r.ReadQString(); if err != nil { return err }
+	if exQtLabelDebugCount < 2 { fmt.Printf("      label text='%s' @%d\n", str, r.Position()) }
+	exQtLabelDebugCount++
 	if err := exQtQColor(r); err != nil { return err }
 	if err := exQtQColor(r); err != nil { return err }
-	if _, err := r.ReadUInt32(); err != nil { return err }
-	b1, _ := r.ReadUInt32(); if b1 == 0x89504e47 { for { ch, err := r.ReadUInt32(); if err != nil { return err }; if ch == 0x49454e44 { break } } }
+	// QPixMap: header marker (uint32 already acts as presence/size), then maybe PNG magic in next 4 bytes
+	_, _ = r.ReadUInt32()
+	if sig, _ := r.Peek(4); len(sig) == 4 {
+		if uint32(sig[0])<<24|uint32(sig[1])<<16|uint32(sig[2])<<8|uint32(sig[3]) == 0x89504e47 {
+			if err := exQtSkipPNG(r); err != nil { return err }
+		}
+	}
 	if _, err := r.ReadBool(); err != nil { return err }
 	if _, err := r.ReadBool(); err != nil { return err }
+	if exQtLabelDebugCount <= 3 {
+		if peek, _ := r.Peek(8); len(peek) == 8 {
+			fmt.Printf("      after-label peek next8=%02x %02x %02x %02x %02x %02x %02x %02x @%d\n", peek[0],peek[1],peek[2],peek[3],peek[4],peek[5],peek[6],peek[7], r.Position())
+		}
+	}
 	return nil
+}
+// exQtSkipPNG scans until it sees the PNG IEND chunk marker and consumes it.
+func exQtSkipPNG(r *mapparser.BinaryReader) error {
+	needle := []byte{0x49, 0x45, 0x4e, 0x44} // 'I','E','N','D'
+	for {
+		peek, err := r.Peek(4)
+		if err != nil || len(peek) < 4 { return err }
+		if peek[0]==needle[0] && peek[1]==needle[1] && peek[2]==needle[2] && peek[3]==needle[3] {
+			// consume 'IEND' + 4-byte CRC
+			if err := r.Skip(8); err != nil { return err }
+			return nil
+		}
+		if _, err := r.ReadByte(); err != nil { return err }
+	}
 }
 func exQtMudletLabels(r *mapparser.BinaryReader) error {
 	sz, err := r.ReadInt32(); if err != nil { return err }
