@@ -99,7 +99,7 @@ Plik mapy Mudleta (.map)
 
 ## 📚 Źródła referencyjne i dokumentacja formatu
 
-### Mudlet - kod źródłowy klienta
+### Mudlet — kod źródłowy klienta
 W katalogu `docs/sources/Mudlet/` znajdują się kluczowe pliki z kodu źródłowego Mudleta (C++):
 - **TRoom.cpp/TRoom.h** - implementacja klasy pokoju z metodami serialization/deserialization
 - **TArea.cpp/TArea.h** - implementacja klasy obszaru 
@@ -109,9 +109,9 @@ W katalogu `docs/sources/Mudlet/` znajdują się kluczowe pliki z kodu źródło
 - **T2DMap.cpp/T2DMap.h** - renderowanie 2D mapy
 
 ### qdatastream.go
-znajdziesz tu implementację QDataStream w formie pliku `qdatastream.go`. To dobra baza do zrozumienia formatu binarnego Qt.
+Znajdziesz tu implementację QDataStream w formie pliku `qdatastream.go`. To dobra baza do zrozumienia formatu binarnego Qt.
 
-### Node.js parser - działająca implementacja
+### Node.js parser — działająca implementacja
 W katalogu `docs/sources/node-mudlet-map-binary-reader/` znajduje się działający parser Node.js:
 - **README.md** - dokumentacja użycia, obsługuje v20 formatu Mudleta
 - **index.js** - punkt wejścia z API do read/write/export
@@ -140,326 +140,44 @@ W katalogu `docs/sources/node-mudlet-map-binary-reader/` znajduje się działaj�
 ### 1. Parser map Mudleta (pkg/mapparser)
 
 #### Struktury danych
-```go
-package mapparser
-
-import "image/color"
-
-type Map struct {
-    Header       Header                `json:"header"`
-    Rooms        map[int32]*Room       `json:"rooms"`
-    Areas        map[int32]*Area       `json:"areas"`
-    Environments []Environment         `json:"environments"`
-    CustomLines  []CustomLine          `json:"customLines,omitempty"`
-    Labels       []Label               `json:"labels,omitempty"`
-}
-
-type Header struct {
-    Magic   string `json:"magic"`   // "ATADNOOM"
-    Version int8   `json:"version"` // 1, 2, lub 3
-}
-
-type Room struct {
-    ID          int32  `json:"id"`
-    X           int32  `json:"x"`
-    Y           int32  `json:"y"`
-    Z           int32  `json:"z"`
-    Name        string `json:"name"`
-    Description string `json:"description"`
-    Environment int32  `json:"environment"`
-    Exits       []Exit `json:"exits"`
-}
-
-type Exit struct {
-    Direction string `json:"direction"`  // "north", "south", etc.
-    TargetID  int32  `json:"targetId"`   // ID docelowego pokoju
-    Lock      bool   `json:"lock"`       // zablokowane wyjście (v3+)
-    Weight    int32  `json:"weight"`     // waga przejścia (v3+)
-}
-
-type Area struct {
-    ID   int32  `json:"id"`
-    Name string `json:"name"`
-}
-
-type Environment struct {
-    Name  string `json:"name"`    // "forest", "city", etc.
-    Color int32  `json:"color"`   // RGB color as int32
-}
-
-type CustomLine struct {
-    X1, Y1, Z1 int32 `json:"x1,y1,z1"`
-    X2, Y2, Z2 int32 `json:"x2,y2,z2"`
-    Color      int32 `json:"color"`
-    Width      int8  `json:"width"`
-    Style      int8  `json:"style"`
-}
-
-type Label struct {
-    X, Y, Z        int32  `json:"x,y,z"`
-    Text           string `json:"text"`
-    Color          int32  `json:"color"`
-    Size           int8   `json:"size"`
-    ShowBackground bool   `json:"showBackground"`
-}
-```
 
 #### API parsera
-```go
-// Główna funkcja parsowania
-func ParseMapFile(filename string) (*Map, error)
-
-// Parsowanie z Reader (dla testów)
-func ParseMap(reader io.Reader) (*Map, error)
-
-// Walidacja integralności mapy
-func ValidateMap(m *Map) []ValidationError
-
-// Eksport do JSON (debugging)
-func ExportToJSON(m *Map, filename string) error
-
-// Statystyki mapy
-func GetMapStats(m *Map) MapStats
-
-type MapStats struct {
-    TotalRooms       int
-    TotalAreas       int
-    TotalEnvironments int
-    BoundingBox      BoundingBox
-    ZLevels          []int32
-}
-
-type BoundingBox struct {
-    MinX, MinY, MinZ int32
-    MaxX, MaxY, MaxZ int32
-}
-```
 
 ### 2. Renderer obrazów (pkg/maprender)
 
 #### Konfiguracja renderowania
-```go
-package maprender
-
-import (
-    "image"
-    "image/color"
-)
-
-type RenderConfig struct {
-    // Wymiary obrazu
-    Width  int `json:"width"`
-    Height int `json:"height"`
-    
-    // Obszar renderowania
-    Radius int   `json:"radius"`        // promień w jednostkach mapy
-    ZLevel int32 `json:"zLevel"`        // poziom Z do renderowania
-    
-    // Rozmiary elementów
-    RoomSize     int `json:"roomSize"`     // rozmiar pokoju w pikselach
-    LineWidth    int `json:"lineWidth"`    // szerokość linii połączeń
-    FontSize     int `json:"fontSize"`     // rozmiar czcionki (opcjonalnie)
-    
-    // Kolory
-    CenterRoomColor color.RGBA `json:"centerRoomColor"`  // kolor centralnego pokoju
-    DefaultRoomColor color.RGBA `json:"defaultRoomColor"` // domyślny kolor pokoju
-    LineColor       color.RGBA `json:"lineColor"`        // kolor linii połączeń
-    BackgroundColor color.RGBA `json:"backgroundColor"`  // kolor tła
-    
-    // Opcje wizualne
-    ShowRoomNames bool `json:"showRoomNames"` // pokazuj nazwy pokoi
-    ShowRoomIDs   bool `json:"showRoomIds"`   // pokazuj ID pokoi
-    ShowExitLabels bool `json:"showExitLabels"` // pokazuj etykiety wyjść
-    AntiAlias     bool `json:"antiAlias"`     // wygładzanie
-    
-    // Mapowanie kolorów środowisk na kolory
-    EnvironmentColors map[string]color.RGBA `json:"environmentColors"`
-}
-
-// Domyślna konfiguracja
-func DefaultConfig() RenderConfig {
-    return RenderConfig{
-        Width:  800,
-        Height: 600,
-        Radius: 10,
-        ZLevel: 0,
-        RoomSize: 8,
-        LineWidth: 2,
-        FontSize: 10,
-        CenterRoomColor: color.RGBA{R: 255, G: 0, B: 0, A: 255}, // czerwony
-        DefaultRoomColor: color.RGBA{R: 100, G: 100, B: 100, A: 255}, // szary
-        LineColor: color.RGBA{R: 200, G: 200, B: 200, A: 255}, // jasny szary
-        BackgroundColor: color.RGBA{R: 0, G: 0, B: 0, A: 255}, // czarny
-        ShowRoomNames: false,
-        ShowRoomIDs: false,
-        ShowExitLabels: false,
-        AntiAlias: true,
-        EnvironmentColors: map[string]color.RGBA{
-            "city":     {R: 150, G: 150, B: 150, A: 255},
-            "forest":   {R: 0, G: 150, B: 0, A: 255},
-            "mountain": {R: 139, G: 69, B: 19, A: 255},
-            "water":    {R: 0, G: 100, B: 200, A: 255},
-            "desert":   {R: 238, G: 203, B: 173, A: 255},
-        },
-    }
-}
-```
 
 #### API renderera
-```go
-// Główna funkcja renderowania
-func RenderMapFragment(m *mapparser.Map, centerRoomID int32, config RenderConfig) (image.Image, error)
-
-// Znajdowanie pokoi w promieniu
-func FindRoomsInRadius(m *mapparser.Map, centerRoomID int32, radius int, zLevel int32) ([]*mapparser.Room, error)
-
-// Transformacja współrzędnych mapa -> obraz
-func CalculateCoordTransform(rooms []*mapparser.Room, config RenderConfig) CoordTransform
-
-type CoordTransform struct {
-    ScaleX, ScaleY float64
-    OffsetX, OffsetY float64
-    CenterX, CenterY int32  // współrzędne centralnego pokoju na mapie
-}
-
-func (ct CoordTransform) MapToImage(mapX, mapY int32) (imgX, imgY int)
-
-// Zapis do różnych formatów
-func SaveAsWebP(img image.Image, filename string) error
-func SaveAsPNG(img image.Image, filename string) error  
-
-// Generowanie różnych stylów map
-func RenderTopographicStyle(m *mapparser.Map, centerRoomID int32, config RenderConfig) (image.Image, error)
-func RenderMinimalistStyle(m *mapparser.Map, centerRoomID int32, config RenderConfig) (image.Image, error)
-func RenderDetailedStyle(m *mapparser.Map, centerRoomID int32, config RenderConfig) (image.Image, error)
-```
 
 #### Algorytm renderowania
-```go
-func RenderMapFragment(m *mapparser.Map, centerRoomID int32, config RenderConfig) (image.Image, error) {
-    // 1. Znajdź centralny pokój
-    centerRoom, exists := m.Rooms[centerRoomID]
-    if !exists {
-        return nil, fmt.Errorf("room %d not found", centerRoomID)
-    }
-    
-    // 2. Zbierz pokoje w promieniu na danym poziomie Z
-    rooms, err := FindRoomsInRadius(m, centerRoomID, config.Radius, config.ZLevel)
-    if err != nil {
-        return nil, err
-    }
-    
-    // 3. Oblicz transformację współrzędnych
-    transform := CalculateCoordTransform(rooms, config)
-    
-    // 4. Stwórz canvas i kontekst rysowania
-    img := image.NewRGBA(image.Rect(0, 0, config.Width, config.Height))
-    gc := setupDrawingContext(img, config)
-    
-    // 5. Narysuj tło
-    drawBackground(gc, config)
-    
-    // 6. Narysuj połączenia (linie) między pokojami
-    drawConnections(gc, rooms, transform, config, m)
-    
-    // 7. Narysuj pokoje
-    drawRooms(gc, rooms, centerRoom, transform, config, m)
-    
-    // 8. Dodaj etykiety i tekst (opcjonalnie)
-    if config.ShowRoomNames || config.ShowRoomIDs {
-        drawLabels(gc, rooms, centerRoom, transform, config)
-    }
-    
-    return img, nil
-}
-```
 
 ### 3. Narzędzia pomocnicze (pkg/maputils)
 
 #### Wyszukiwanie i filtrowanie
-```go
-package maputils
-
-// Wyszukiwanie pokoi
-func FindRoomByName(m *mapparser.Map, name string) []*mapparser.Room
-func FindRoomsByArea(m *mapparser.Map, areaID int32) []*mapparser.Room
-func FindRoomsByEnvironment(m *mapparser.Map, envName string) []*mapparser.Room
-
-// Analiza połączeń
-func GetConnectedRooms(m *mapparser.Map, roomID int32) []*mapparser.Room
-func FindShortestPath(m *mapparser.Map, fromID, toID int32) ([]int32, error)
-func AnalyzeConnectivity(m *mapparser.Map) ConnectivityReport
-
-type ConnectivityReport struct {
-    DisconnectedRooms []int32
-    DeadEnds         []int32
-    Hubs             []int32 // pokoje z więcej niż 4 wyjściami
-}
-
-// Statystyki obszarów
-func GetAreaStatistics(m *mapparser.Map) map[int32]AreaStats
-
-type AreaStats struct {
-    RoomCount    int
-    BoundingBox  BoundingBox
-    Environments map[string]int
-}
-```
 
 ### 4. CLI Tool (cmd/mapsnap)
 
 #### Argumenty wiersza poleceń
-```go
-type CLIFlags struct {
-    // Podstawowe
-    MapFile  string // -map
-    RoomID   int32  // -room
-    Output   string // -output
-    
-    // Wymiary i renderowanie
-    Width    int // -width
-    Height   int // -height
-    Radius   int // -radius
-    RoomSize int // -roomsize
-    ZLevel   int32 // -zlevel
-    
-    // Tryby pracy
-    Validate bool   // -validate
-    Debug    bool   // -debug
-    DumpJSON string // -dump-json
-    
-    // Style i kolory
-    Style            string // -style (default, topographic, minimal, detailed)
-    CenterRoomColor  string // -center-color
-    BackgroundColor  string // -bg-color
-    ShowRoomNames    bool   // -show-names
-    ShowRoomIDs      bool   // -show-ids
-    
-    // Format wyjściowy
-    Format  string // -format (webp, png, jpeg)
-    Quality int    // -quality (dla JPEG)
-    
-    // Batch processing
-    BatchFile string // -batch (plik z listą pokoi do wygenerowania)
-    
-    // Konfiguracja
-    ConfigFile string // -config (plik YAML/JSON z konfiguracją)
-}
+```
+mapFile := flag.String("map", "", "Path to the Mudlet map file (.map)")
+roomID := flag.Int("room", 0, "Room ID to center the map on")
+outputFile := flag.String("output", "", "Output file path")
+dumpJSON := flag.String("dump-json", "", "Dump map to JSON file")
+validate := flag.Bool("validate", false, "Validate map integrity")
+showStats := flag.Bool("stats", false, "Show map statistics")
+debug := flag.Bool("debug", false, "Enable debug output")
+examine := flag.Bool("examine", false, "Examine the binary structure of the map file")
+examineQt := flag.Bool("examine-qt", false, "Examine Qt/MudletMap sections and offsets")
+timeout := flag.Int("timeout", 30, "Timeout in seconds for parsing operations")
 ```
 
 #### Przykłady użycia CLI
 ```bash
-# Podstawowe użycie
+# Podstawowe użycie  (wygeneruj obrazek pokazujący fragment mapy wycentrowany na pokoju 1234)
 ./mapsnap -map arkadia.map -room 1234
 
-# Niestandardowe wymiary i styl
-./mapsnap -map arkadia.map -room 1234 \
-  -width 1200 -height 800 \
-  -style topographic \
-  -show-names
-
-# Generowanie dla konkretnego poziomu Z
-./mapsnap -map arkadia.map -room 1234 -zlevel -1 -output podziemia.webp
+# Podstawowe użycie  (wygeneruj obrazek pokazujący fragment mapy wycentrowany na pokoju 1234), zapisz do pliku podziemia.webp
+./mapsnap -map arkadia.map -room 1234 -output podziemia.webp
 
 # Walidacja mapy
 ./mapsnap -map arkadia.map -validate
@@ -467,19 +185,8 @@ type CLIFlags struct {
 # Eksport struktury do JSON
 ./mapsnap -map arkadia.map -dump-json struktura_mapy.json
 
-# Batch processing
-./mapsnap -map arkadia.map -batch lokacje.txt
-
 # Z plikiem konfiguracyjnym
 ./mapsnap -map arkadia.map -room 1234 -config moja_konfiguracja.yaml
-```
-
-#### Format pliku batch
-```
-# Plik lokacje.txt
-1234:fragment_1234.webp
-5678:fragment_5678.webp
-9012:podziemia_9012.webp:zlevel=-1
 ```
 
 #### Format pliku konfiguracyjnego (YAML)
@@ -514,89 +221,12 @@ output:
 ## 🧪 Testowanie
 
 ### Struktura testów
-```
-tests/
-├── unit/
-│   ├── parser_test.go       # Testy parsera
-│   ├── renderer_test.go     # Testy renderera
-│   └── utils_test.go        # Testy narzędzi
-├── integration/
-│   ├── full_pipeline_test.go # Testy całego pipeline
-│   └── cli_test.go          # Testy CLI
-├── fixtures/
-│   ├── sample_maps/         # Przykładowe mapy do testów
-│   ├── expected_outputs/    # Oczekiwane wyniki
-│   └── corrupted_maps/      # Uszkodzone mapy do testów błędów
-└── benchmark/
-    ├── parser_bench_test.go
-    └── render_bench_test.go
-```
 
 ### Testy kluczowych funkcji
-```go
-func TestParseCompleteMap(t *testing.T) {
-    m, err := mapparser.ParseMapFile("fixtures/arkadia_sample.map")
-    require.NoError(t, err)
-    
-    assert.Equal(t, "ATADNOOM", m.Header.Magic)
-    assert.True(t, len(m.Rooms) > 0)
-    assert.True(t, len(m.Areas) > 0)
-    
-    // Sprawdź integralność połączeń
-    for _, room := range m.Rooms {
-        for _, exit := range room.Exits {
-            if exit.TargetID > 0 {
-                _, exists := m.Rooms[exit.TargetID]
-                assert.True(t, exists, "Room %d->%d: target not found", room.ID, exit.TargetID)
-            }
-        }
-    }
-}
-
-func TestRenderFragment(t *testing.T) {
-    m := loadTestMap(t)
-    config := maprender.DefaultConfig()
-    
-    img, err := maprender.RenderMapFragment(m, 1234, config)
-    require.NoError(t, err)
-    
-    bounds := img.Bounds()
-    assert.Equal(t, config.Width, bounds.Dx())
-    assert.Equal(t, config.Height, bounds.Dy())
-    
-    // Sprawdź czy centralny pokój jest wyróżniony
-    centerX, centerY := bounds.Dx()/2, bounds.Dy()/2
-    centerColor := img.At(centerX, centerY)
-    // assert że kolor to czerwony (centralny pokój)
-}
-
-func BenchmarkParseMap(b *testing.B) {
-    for i := 0; i < b.N; i++ {
-        mapparser.ParseMapFile("fixtures/large_map.map")
-    }
-}
-```
 
 ## 📦 Dependency Management
 
-### go.mod
-```go
-module github.com/szydell/arkadia-mapsnap
-
-go 1.21
-
-require (
-    github.com/HugoSmits86/nativewebp v0.0.0-20220101000000-abcdef123456
-    github.com/golang/freetype v0.0.0-20170609013337-24b699ab12dc
-    github.com/spf13/cobra v1.7.0
-    github.com/spf13/viper v1.16.0
-    gopkg.in/yaml.v3 v3.0.1
-)
-
-require (
-    // Indirect dependencies...
-)
-```
+go 1.24+
 
 ## 🚀 Roadmap rozwoju
 
@@ -624,8 +254,9 @@ require (
 
 ### Struktura dokumentacji
 ```
+README.md              # Główna dokumentacja
+CHANGELOG.md           # Historia zmian
 docs/
-├── README.md              # Główna dokumentacja
 ├── INSTALLATION.md        # Instrukcje instalacji
 ├── QUICK_START.md         # Szybki start
 ├── API_REFERENCE.md       # Dokumentacja API biblioteki
@@ -635,7 +266,7 @@ docs/
 ├── EXAMPLES.md           # Przykłady użycia
 ├── TROUBLESHOOTING.md    # Rozwiązawanie problemów
 ├── CONTRIBUTING.md       # Wytyczne dla kontrybutorów
-└── CHANGELOG.md          # Historia zmian
+
 ```
 
 ## 🔧 Wskazówki implementacyjne
