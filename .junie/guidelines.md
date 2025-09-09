@@ -280,27 +280,40 @@ docs/
 6. **Dokumentacja** - na końcu każdej fazy
 
 ### 2. Debugowanie parsera
-```go
-// Dodaj hex dump dla porównania z referencyjną implementacją
-func debugHexDump(data []byte, offset int) {
-    fmt.Printf("Offset %d:\n", offset)
-    for i := 0; i < len(data) && i < 64; i += 16 {
-        fmt.Printf("%08x: ", offset+i)
-        for j := i; j < i+16 && j < len(data); j++ {
-            fmt.Printf("%02x ", data[j])
-        }
-        fmt.Println()
-    }
-}
-```
 
 ### 3. Obsługa błędów
-```go
+```
 // Używaj wrapped errors dla lepszego debugowania
 if err := parseRoom(reader, version); err != nil {
     return fmt.Errorf("parsing room at offset %d: %w", offset, err)
 }
 ```
+Obsługa błędów zamykania plików: defer file.Close()
+```
+// Zalecenia dla Go 1.20+ (projekt używa Go 1.24+):
+// - Stosuj nazwane wartości zwracane (err).
+// - Łącz błąd parsowania i błąd zamknięcia przez errors.Join.
+
+func exampleCloseHandling(path string) (err error) {
+    f, err := os.Open(path)
+    if err != nil {
+        return fmt.Errorf("open: %w", err)
+    }
+    defer func() {
+        if cerr := f.Close(); cerr != nil {
+            if err != nil {
+                err = errors.Join(err, fmt.Errorf("close: %w", cerr))
+            } else {
+                err = fmt.Errorf("close: %w", cerr)
+            }
+        }
+    }()
+
+    // ... praca z plikiem ...
+    return nil
+}
+```
+
 
 ### 4. Wydajność
 - Używaj `bufio.Reader` dla dużych plików
