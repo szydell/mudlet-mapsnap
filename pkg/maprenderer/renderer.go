@@ -209,17 +209,30 @@ func (r *Renderer) drawRoom(img *image.RGBA, x, y int, roomColor color.RGBA, roo
 
 	// Draw room symbol if present
 	if r.config.ShowSymbol && room.Symbol != "" {
-		r.drawRoomSymbol(img, x, y, room.Symbol)
+		r.drawRoomSymbol(img, x, y, room.Symbol, room, roomColor)
 	}
 }
 
 // drawRoomSymbol draws the room symbol text
-func (r *Renderer) drawRoomSymbol(img *image.RGBA, cx, cy int, symbol string) {
+func (r *Renderer) drawRoomSymbol(img *image.RGBA, cx, cy int, symbol string, room *mapparser.MudletRoom, roomColor color.RGBA) {
 	if len(symbol) == 0 {
 		return
 	}
 
-	symbolColor := r.config.TextColor
+	// Mudlet logic: use room's symbolColor if set, otherwise contrast with room color
+	var symbolColor color.RGBA
+	if room.SymbolColor != nil {
+		r, g, b, a := room.SymbolColor.ToRGBA()
+		symbolColor = color.RGBA{R: r, G: g, B: b, A: a}
+	} else {
+		// Calculate lightness of room color (simple average)
+		lightness := (int(roomColor.R) + int(roomColor.G) + int(roomColor.B)) / 3
+		if lightness > 127 {
+			symbolColor = color.RGBA{R: 0, G: 0, B: 0, A: 255} // Black on light
+		} else {
+			symbolColor = color.RGBA{R: 255, G: 255, B: 255, A: 255} // White on dark
+		}
+	}
 	size := max(3, r.config.RoomSize/4)
 
 	// Get first character

@@ -71,8 +71,8 @@ func DefaultConfig() *Config {
 
 		DefaultEnvColors: defaultEnvironmentColors(),
 
-		ShowUpperLevel:  true,
-		ShowLowerLevel:  true,
+		ShowUpperLevel:  false,
+		ShowLowerLevel:  false,
 		UpperLevelAlpha: 80,
 		LowerLevelAlpha: 80,
 	}
