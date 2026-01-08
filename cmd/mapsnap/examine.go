@@ -1,142 +1,519 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
+
+	"github.com/szydell/arkadia-mapsnap/pkg/mapparser"
 )
 
-// ExamineFile examines a binary file and prints its structure
+// ExamineFile examines a binary map file and walks through its Qt/MudletMap structure,
+// logging offsets and sizes for each section.
 func ExamineFile(filename string) error {
-	file, err := os.Open(filename)
+	// Get file info for size
+	info, err := os.Stat(filename)
+	if err != nil {
+		return fmt.Errorf("stat file: %w", err)
+	}
+	fmt.Printf("File size: %d bytes\n\n", info.Size())
+
+	f, err := os.Open(filename)
 	if err != nil {
 		return fmt.Errorf("opening file: %w", err)
 	}
-	defer file.Close()
+	defer f.Close()
 
-	// Read first 1024 bytes
-	data := make([]byte, 1024)
-	n, err := file.Read(data)
-	if err != nil && err != io.EOF {
-		return fmt.Errorf("reading file: %w", err)
+	r := mapparser.NewBinaryReader(f)
+	log := func(section string) {
+		fmt.Printf("@%d: %s\n", r.Position(), section)
 	}
-	data = data[:n]
 
-	fmt.Printf("File size: %d bytes\n", n)
-	fmt.Println("First 32 bytes as hex:")
-	for i := 0; i < 32 && i < n; i++ {
-		fmt.Printf("%02x ", data[i])
-		if (i+1)%8 == 0 {
-			fmt.Println()
+	// version (qint32)
+	log("Begin MudletMap.version (qint32)")
+	version, err := r.ReadInt32()
+	if err != nil {
+		return fmt.Errorf("version: %w", err)
+	}
+	fmt.Printf("    version = %d\n", version)
+	log("After version")
+
+	// envColors: QMap<int,int>
+	log("Begin envColors QMap<int,int>")
+	if err := examineQMapIntInt(r); err != nil {
+		return fmt.Errorf("envColors: %w", err)
+	}
+	log("After envColors")
+
+	// areaNames: QMap<int, QString>
+	log("Begin areaNames QMap<int,QString>")
+	if err := examineQMapIntQString(r); err != nil {
+		return fmt.Errorf("areaNames: %w", err)
+	}
+	log("After areaNames")
+
+	// mCustomEnvColors: QMap<int,QColor>
+	log("Begin mCustomEnvColors QMap<int,QColor>")
+	if err := examineQMapIntQColor(r); err != nil {
+		return fmt.Errorf("mCustomEnvColors: %w", err)
+	}
+	log("After mCustomEnvColors")
+
+	// mpRoomDbHashToRoomId: QMap<QString,QUInt>
+	log("Begin mpRoomDbHashToRoomId QMap<QString,QUInt>")
+	if err := examineQMapQStringUInt(r); err != nil {
+		return fmt.Errorf("mpRoomDbHashToRoomId: %w", err)
+	}
+	log("After mpRoomDbHashToRoomId")
+
+	// mUserData: QMap<QString,QString>
+	log("Begin mUserData QMap<QString,QString>")
+	if err := examineQMapQStringQString(r); err != nil {
+		return fmt.Errorf("mUserData: %w", err)
+	}
+	log("After mUserData")
+
+	// mapSymbolFont: QFont
+	log("Begin mapSymbolFont QFont")
+	if err := examineQFont(r); err != nil {
+		return fmt.Errorf("mapSymbolFont: %w", err)
+	}
+	log("After mapSymbolFont")
+
+	// mapFontFudgeFactor: double
+	log("Begin mapFontFudgeFactor (double)")
+	fudge, err := r.ReadDouble()
+	if err != nil {
+		return fmt.Errorf("mapFontFudgeFactor: %w", err)
+	}
+	fmt.Printf("    mapFontFudgeFactor = %f\n", fudge)
+	log("After mapFontFudgeFactor")
+
+	// useOnlyMapFont: bool
+	log("Begin useOnlyMapFont (bool)")
+	useOnly, err := r.ReadBool()
+	if err != nil {
+		return fmt.Errorf("useOnlyMapFont: %w", err)
+	}
+	fmt.Printf("    useOnlyMapFont = %v\n", useOnly)
+	log("After useOnlyMapFont")
+
+	// areas: MudletAreas
+	log("Begin areas MudletAreas")
+	if err := examineMudletAreas(r); err != nil {
+		return fmt.Errorf("areas: %w", err)
+	}
+	log("After areas")
+
+	// mRoomIdHash: QMap<QString,QInt>
+	log("Begin mRoomIdHash QMap<QString,QInt>")
+	if err := examineQMapQStringInt(r); err != nil {
+		return fmt.Errorf("mRoomIdHash: %w", err)
+	}
+	log("After mRoomIdHash")
+
+	// labels: MudletLabels
+	log("Begin labels MudletLabels")
+	if err := examineMudletLabels(r); err != nil {
+		return fmt.Errorf("labels: %w", err)
+	}
+	log("After labels")
+
+	fmt.Printf("\nRooms section should start around offset %d\n", r.Position())
+	return nil
+}
+
+func examineQMapIntInt(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("    count = %d\n", sz)
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+		if _, err := r.ReadInt32(); err != nil {
+			return err
 		}
 	}
-	fmt.Println()
+	return nil
+}
 
-	// Try to interpret the first few values as different types
-	if n >= 4 {
-		fmt.Printf("First 4 bytes as int32 (big endian): %d\n", binary.BigEndian.Uint32(data[:4]))
-		fmt.Printf("First 4 bytes as int32 (little endian): %d\n", binary.LittleEndian.Uint32(data[:4]))
+func examineQMapIntQString(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
 	}
+	fmt.Printf("    count = %d\n", sz)
+	for i := 0; i < int(sz); i++ {
+		fmt.Printf("    entry %d @%d begin\n", i, r.Position())
+		key, err := r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		peek, _ := r.Peek(8)
+		if len(peek) >= 8 {
+			fmt.Printf("      key=%d next8=%02x %02x %02x %02x %02x %02x %02x %02x @%d\n",
+				key, peek[0], peek[1], peek[2], peek[3], peek[4], peek[5], peek[6], peek[7], r.Position())
+		}
+		// Manually read QString for instrumentation
+		lenPeek, _ := r.Peek(4)
+		var byteLen uint32 = uint32(lenPeek[0])<<24 | uint32(lenPeek[1])<<16 | uint32(lenPeek[2])<<8 | uint32(lenPeek[3])
+		fmt.Printf("      QString byteLen (peek)=%d @%d\n", byteLen, r.Position())
+		str, err := r.ReadQString()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("      QString value='%s' after QString @%d\n", str, r.Position())
+	}
+	return nil
+}
 
-	// Look for UTF-16 strings
-	fmt.Println("\nPossible UTF-16 strings:")
+func examineQMapIntQColor(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("    count = %d\n", sz)
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+		if err := examineQColor(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	// Look for UTF-16BE strings (first byte is 0, second byte is ASCII)
-	fmt.Println("UTF-16BE strings (common in Java and network protocols):")
-	for i := 0; i < n-20; i += 2 {
-		if data[i] == 0 && data[i+1] >= 32 && data[i+1] <= 126 {
-			// Found potential start of UTF-16BE string
-			start := i
-			str := ""
+func examineQMapQStringUInt(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("    count = %d\n", sz)
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadQString(); err != nil {
+			return err
+		}
+		if _, err := r.ReadUInt32(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-			for j := i; j < n-1; j += 2 {
-				if data[j] == 0 && data[j+1] >= 32 && data[j+1] <= 126 {
-					str += string(data[j+1])
-				} else {
-					break
-				}
-			}
+func examineQMapQStringQString(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("    count = %d\n", sz)
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadQString(); err != nil {
+			return err
+		}
+		if _, err := r.ReadQString(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-			// Only report strings of reasonable length
-			if len(str) >= 4 {
-				fmt.Printf("Offset %d: UTF-16BE String: %s\n", start, str)
-				// Skip ahead to avoid duplicate detections
-				i = start + len(str)*2 - 2
+func examineQMapQStringInt(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("    count = %d\n", sz)
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadQString(); err != nil {
+			return err
+		}
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func examineQColor(r *mapparser.BinaryReader) error {
+	if _, err := r.ReadInt8(); err != nil {
+		return err
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := r.ReadUInt16(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func examineQFont(r *mapparser.BinaryReader) error {
+	if _, err := r.ReadQString(); err != nil {
+		return err
+	}
+	if _, err := r.ReadQString(); err != nil {
+		return err
+	}
+	if _, err := r.ReadDouble(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt32(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt8(); err != nil {
+		return err
+	}
+	if _, err := r.ReadUInt16(); err != nil {
+		return err
+	}
+	if _, err := r.ReadByte(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt8(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt8(); err != nil {
+		return err
+	}
+	if _, err := r.ReadUInt16(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt8(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt32(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt32(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt8(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt8(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func examineQListUInt(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadUInt32(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func examineQListInt(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func examineQVector(r *mapparser.BinaryReader) error {
+	for i := 0; i < 3; i++ {
+		if _, err := r.ReadDouble(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func examineMudletArea(r *mapparser.BinaryReader) error {
+	if err := examineQListUInt(r); err != nil {
+		return err
+	}
+	if err := examineQListInt(r); err != nil {
+		return err
+	}
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := 0; i < int(sz); i++ {
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+	}
+	if _, err := r.ReadBool(); err != nil {
+		return err
+	}
+	for i := 0; i < 6; i++ {
+		if _, err := r.ReadInt32(); err != nil {
+			return err
+		}
+	}
+	if err := examineQVector(r); err != nil {
+		return err
+	}
+	for i := 0; i < 4; i++ {
+		if err := examineQMapIntInt(r); err != nil {
+			return err
+		}
+	}
+	if err := examineQVector(r); err != nil {
+		return err
+	}
+	if _, err := r.ReadBool(); err != nil {
+		return err
+	}
+	if _, err := r.ReadInt32(); err != nil {
+		return err
+	}
+	if err := examineQMapQStringQString(r); err != nil {
+		return err
+	}
+	return nil
+}
+
+func examineMudletAreas(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("    count = %d\n", sz)
+	for i := 0; i < int(sz); i++ {
+		areaID, err := r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("    area %d (id=%d) @%d\n", i, areaID, r.Position())
+		if err := examineMudletArea(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var labelDebugCount int
+
+func examineMudletLabel(r *mapparser.BinaryReader) error {
+	if _, err := r.ReadInt32(); err != nil {
+		return err
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := r.ReadDouble(); err != nil {
+			return err
+		}
+	}
+	// dummy1, dummy2
+	for i := 0; i < 2; i++ {
+		if _, err := r.ReadDouble(); err != nil {
+			return err
+		}
+	}
+	// size: QPair<double,double>
+	for i := 0; i < 2; i++ {
+		if _, err := r.ReadDouble(); err != nil {
+			return err
+		}
+	}
+	if labelDebugCount < 3 {
+		if peek, _ := r.Peek(8); len(peek) == 8 {
+			fmt.Printf("      pre-QString next8=%02x %02x %02x %02x %02x %02x %02x %02x @%d\n",
+				peek[0], peek[1], peek[2], peek[3], peek[4], peek[5], peek[6], peek[7], r.Position())
+		}
+	}
+	str, err := r.ReadQString()
+	if err != nil {
+		return err
+	}
+	if labelDebugCount < 3 {
+		fmt.Printf("      label text='%s' @%d\n", str, r.Position())
+	}
+	labelDebugCount++
+	if err := examineQColor(r); err != nil {
+		return err
+	}
+	if err := examineQColor(r); err != nil {
+		return err
+	}
+	// QPixMap: header marker (uint32 already acts as presence/size), then maybe PNG magic in next 4 bytes
+	_, _ = r.ReadUInt32()
+	if sig, _ := r.Peek(4); len(sig) == 4 {
+		if uint32(sig[0])<<24|uint32(sig[1])<<16|uint32(sig[2])<<8|uint32(sig[3]) == 0x89504e47 {
+			if err := examineSkipPNG(r); err != nil {
+				return err
 			}
 		}
 	}
+	if _, err := r.ReadBool(); err != nil {
+		return err
+	}
+	if _, err := r.ReadBool(); err != nil {
+		return err
+	}
+	if labelDebugCount <= 3 {
+		if peek, _ := r.Peek(8); len(peek) == 8 {
+			fmt.Printf("      after-label peek next8=%02x %02x %02x %02x %02x %02x %02x %02x @%d\n",
+				peek[0], peek[1], peek[2], peek[3], peek[4], peek[5], peek[6], peek[7], r.Position())
+		}
+	}
+	return nil
+}
 
-	// Look for UTF-16LE strings (first byte is ASCII, second byte is 0)
-	fmt.Println("\nUTF-16LE strings (common in Windows):")
-	for i := 0; i < n-20; i += 2 {
-		if data[i] >= 32 && data[i] <= 126 && data[i+1] == 0 {
-			// Found potential start of UTF-16LE string
-			start := i
-			str := ""
-
-			for j := i; j < n-1; j += 2 {
-				if data[j] >= 32 && data[j] <= 126 && data[j+1] == 0 {
-					str += string(data[j])
-				} else {
-					break
-				}
+// examineSkipPNG scans until it sees the PNG IEND chunk marker and consumes it.
+func examineSkipPNG(r *mapparser.BinaryReader) error {
+	needle := []byte{0x49, 0x45, 0x4e, 0x44} // 'I','E','N','D'
+	for {
+		peek, err := r.Peek(4)
+		if err != nil || len(peek) < 4 {
+			return err
+		}
+		if peek[0] == needle[0] && peek[1] == needle[1] && peek[2] == needle[2] && peek[3] == needle[3] {
+			// consume 'IEND' + 4-byte CRC
+			if err := r.Skip(8); err != nil {
+				return err
 			}
+			return nil
+		}
+		if _, err := r.ReadByte(); err != nil {
+			return err
+		}
+	}
+}
 
-			// Only report strings of reasonable length
-			if len(str) >= 4 {
-				fmt.Printf("Offset %d: UTF-16LE String: %s\n", start, str)
-				// Skip ahead to avoid duplicate detections
-				i = start + len(str)*2 - 2
+func examineMudletLabels(r *mapparser.BinaryReader) error {
+	sz, err := r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("    count = %d (number of areas with labels)\n", sz)
+	for i := 0; i < int(sz); i++ {
+		total, err := r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		areaID, err := r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("    area %d: areaID=%d, labels=%d @%d\n", i, areaID, total, r.Position())
+		for j := 0; j < int(total); j++ {
+			if err := examineMudletLabel(r); err != nil {
+				return err
 			}
 		}
 	}
-
-	// Look for length-prefixed strings (4-byte length followed by UTF-16BE)
-	fmt.Println("\nLength-prefixed UTF-16BE strings:")
-	for i := 0; i < n-8; i += 4 {
-		// Check for a potential length prefix (4 bytes)
-		if i+4 < n {
-			length := int(binary.BigEndian.Uint32(data[i:i+4]))
-			// Only consider reasonable string lengths
-			if length > 0 && length < 100 && i+4+length*2 <= n {
-				str := ""
-				valid := true
-
-				for j := 0; j < length; j++ {
-					if i+4+j*2+1 < n {
-						// Check for UTF-16BE pattern (first byte is 0 for ASCII range)
-						if data[i+4+j*2] == 0 && data[i+4+j*2+1] >= 32 && data[i+4+j*2+1] <= 126 {
-							str += string(data[i+4+j*2+1])
-						} else {
-							valid = false
-							break
-						}
-					}
-				}
-
-				if valid && len(str) == length {
-					fmt.Printf("Offset %d: Length prefix %d, String: %s\n", i, length, str)
-				}
-			}
-		}
-	}
-
-	// Try to find ASCII strings
-	fmt.Println("\nPossible ASCII strings:")
-	start := -1
-	for i := 0; i < n; i++ {
-		if data[i] >= 32 && data[i] <= 126 {
-			if start == -1 {
-				start = i
-			}
-		} else {
-			if start != -1 && i-start >= 4 {
-				fmt.Printf("Offset %d: %s\n", start, string(data[start:i]))
-			}
-			start = -1
-		}
-	}
-
 	return nil
 }

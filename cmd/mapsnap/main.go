@@ -24,8 +24,7 @@ func main() {
 	validate := flag.Bool("validate", false, "Validate map integrity")
 	showStats := flag.Bool("stats", false, "Show map statistics")
 	debug := flag.Bool("debug", false, "Enable debug output")
-	examine := flag.Bool("examine", false, "Examine the binary structure of the map file")
-	examineQt := flag.Bool("examine-qt", false, "Examine Qt/MudletMap sections and offsets")
+	examine := flag.Bool("examine", false, "Examine Qt/MudletMap binary structure with offsets")
 	timeout := flag.Int("timeout", 30, "Timeout in seconds for parsing operations")
 
 	// Parse flags
@@ -50,20 +49,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Examine a file if requested
+	// Examine file if requested
 	if *examine {
 		fmt.Printf("Examining map file: %s\n", *mapFile)
 		if err := ExamineFile(*mapFile); err != nil {
 			fmt.Printf("Error examining file: %v\n", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-	// Examine Qt sections if requested
-	if *examineQt {
-		fmt.Printf("Examining Qt/MudletMap sections: %s\n", *mapFile)
-		if err := ExamineQt(*mapFile); err != nil {
-			fmt.Printf("Error examining Qt sections: %v\n", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
