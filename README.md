@@ -95,12 +95,6 @@ mudlet-mapsnap/
 - Contrast-aware room symbol colors
 - Configurable rendering (size, spacing, radius, round rooms)
 
-### Planned
-- HTTP API server
-- SVG output format
-- Batch processing
-- YAML configuration files
-
 ## Documentation
 
 See [AGENTS.md](AGENTS.md) for detailed technical documentation and development guidelines.

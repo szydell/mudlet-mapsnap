@@ -283,11 +283,4 @@ Working Node.js implementation:
 - [x] Unit tests
 
 ### Phase 2: Features
-- [ ] Batch processing
-- [ ] YAML configuration files
 - [ ] Custom line rendering
-
-### Phase 3: Extended
-- [ ] HTTP API server
-- [ ] SVG output format
-- [ ] Docker images
