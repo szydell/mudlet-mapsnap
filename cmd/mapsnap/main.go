@@ -52,7 +52,10 @@ func main() {
 	// Examine file if requested
 	if *examine {
 		fmt.Printf("Examining map file: %s\n", *mapFile)
-		if err := ExamineFile(*mapFile); err != nil {
+		if *debug {
+			fmt.Println("(debug mode - showing detailed output)")
+		}
+		if err := ExamineFile(*mapFile, *debug); err != nil {
 			fmt.Printf("Error examining file: %v\n", err)
 			os.Exit(1)
 		}
