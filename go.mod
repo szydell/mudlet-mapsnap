@@ -1,3 +1,3 @@
 module github.com/szydell/arkadia-mapsnap
 
-go 1.24.6
+go 1.25

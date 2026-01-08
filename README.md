@@ -14,7 +14,7 @@ A Go library and CLI tool for parsing and visualizing Mudlet map files from the 
 ## Installation
 
 ### Prerequisites
-- Go 1.24 or higher
+- Go 1.25 or higher
 
 ### Building from source
 ```bash

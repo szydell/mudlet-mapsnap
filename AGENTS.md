@@ -15,7 +15,7 @@
 
 ## Core technologies
 
-- **Go 1.24+**
+- **Go 1.25+**
 - **QDataStream binary format** (Qt serialization)
 - **Image output**: WEBP format (planned)
 
