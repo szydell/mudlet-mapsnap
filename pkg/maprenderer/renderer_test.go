@@ -23,6 +23,13 @@ func TestDefaultConfig(t *testing.T) {
 	if len(cfg.DefaultEnvColors) != 16 {
 		t.Errorf("Expected 16 default env colors, got %d", len(cfg.DefaultEnvColors))
 	}
+	// Z-level display should be off by default (Mudlet behavior)
+	if cfg.ShowUpperLevel {
+		t.Error("ShowUpperLevel should be false by default")
+	}
+	if cfg.ShowLowerLevel {
+		t.Error("ShowLowerLevel should be false by default")
+	}
 }
 
 func TestEnvToColor(t *testing.T) {
@@ -76,6 +83,46 @@ func TestEnvToColorCustom(t *testing.T) {
 	expected := color.RGBA{R: 255, G: 128, B: 64, A: 255}
 	if result != expected {
 		t.Errorf("envToColor(100) with custom = %v, expected %v", result, expected)
+	}
+}
+
+func TestEnvToColorFallback(t *testing.T) {
+	defaultColors := defaultEnvironmentColors()
+	customColors := map[int32]color.RGBA{}
+
+	// Test fallback for unknown env (should return gray)
+	result := envToColor(-1, customColors, defaultColors)
+	expected := color.RGBA{R: 128, G: 128, B: 128, A: 255}
+	if result != expected {
+		t.Errorf("envToColor(-1) = %v, expected fallback gray %v", result, expected)
+	}
+
+	// Test that env 999 (not in defaults, not in custom, not in ANSI) falls back to gray
+	result = envToColor(999, customColors, defaultColors)
+	if result != expected {
+		t.Errorf("envToColor(999) = %v, expected fallback gray %v", result, expected)
+	}
+}
+
+func TestGetEnvColorWithMudletFallback(t *testing.T) {
+	// Test that getEnvColor falls back to env=1 (red) for unknown environments
+	// This matches Mudlet behavior where unknown envs default to red
+	r := NewRenderer(nil)
+	m := mapparser.NewMudletMap()
+	m.Areas[1] = mapparser.NewMudletArea(1, "Test")
+	room := mapparser.NewMudletRoom(1)
+	room.Area = 1
+	room.Environment = -1 // Unknown environment
+	m.Rooms[1] = room
+	r.SetMap(m)
+
+	customColors := map[int32]color.RGBA{}
+	result := r.getEnvColor(-1, customColors)
+
+	// Should fall back to env=1 (red = 128,0,0)
+	expected := color.RGBA{R: 128, G: 0, B: 0, A: 255}
+	if result != expected {
+		t.Errorf("getEnvColor(-1) = %v, expected Mudlet fallback red %v", result, expected)
 	}
 }
 
