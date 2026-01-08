@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/szydell/arkadia-mapsnap/pkg/mapparser"
+	"github.com/szydell/arkadia-mapsnap/pkg/maprenderer"
 )
 
 var (
@@ -26,6 +27,15 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable debug output")
 	examine := flag.Bool("examine", false, "Examine Qt/MudletMap binary structure with offsets")
 	timeout := flag.Int("timeout", 30, "Timeout in seconds for parsing operations")
+
+	// Rendering options
+	imgWidth := flag.Int("width", 800, "Output image width")
+	imgHeight := flag.Int("height", 600, "Output image height")
+	radius := flag.Int("radius", 15, "Rendering radius (rooms from center)")
+	roomSize := flag.Int("room-size", 20, "Room size in pixels")
+	roomSpacing := flag.Int("room-spacing", 25, "Room spacing in pixels")
+	quality := flag.Float64("quality", 85, "WEBP output quality (0-100)")
+	roundRooms := flag.Bool("round", false, "Draw rooms as circles")
 
 	// Parse flags
 	flag.Parse()
@@ -175,9 +185,47 @@ func main() {
 		fmt.Println("JSON export completed successfully.")
 	}
 
-	// If room ID is provided, we would render the map (not implemented yet)
+	// Render map fragment if room ID and output file provided
 	if *roomID > 0 && *outputFile != "" {
-		fmt.Printf("Map rendering not implemented yet. Would render room %d to %s\n", *roomID, *outputFile)
+		fmt.Printf("Rendering map fragment centered on room %d...\n", *roomID)
+
+		// Configure renderer
+		cfg := maprenderer.DefaultConfig()
+		cfg.Width = *imgWidth
+		cfg.Height = *imgHeight
+		cfg.Radius = *radius
+		cfg.RoomSize = *roomSize
+		cfg.RoomSpacing = *roomSpacing
+		cfg.RoomRound = *roundRooms
+
+		// Create renderer
+		renderer := maprenderer.NewRenderer(cfg)
+		renderer.SetMap(m)
+
+		// Render the fragment
+		result, err := renderer.RenderFragment(int32(*roomID))
+		if err != nil {
+			fmt.Printf("Error rendering map: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Save the output
+		outputOpts := &maprenderer.OutputOptions{
+			Format:  maprenderer.FormatFromPath(*outputFile),
+			Quality: float32(*quality),
+		}
+
+		if err := maprenderer.SaveImage(result.Image, *outputFile, outputOpts); err != nil {
+			fmt.Printf("Error saving image: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Map fragment saved to: %s\n", *outputFile)
+		fmt.Printf("  Center room: %d\n", result.CenterRoom)
+		fmt.Printf("  Area: %s (ID: %d)\n", result.AreaName, result.AreaID)
+		fmt.Printf("  Z-level: %d\n", result.ZLevel)
+		fmt.Printf("  Rooms rendered: %d\n", result.RoomsDrawn)
+		fmt.Printf("  Image size: %dx%d\n", result.Image.Bounds().Dx(), result.Image.Bounds().Dy())
 	}
 }
 
@@ -185,11 +233,29 @@ func printUsage() {
 	fmt.Printf("arkadia-mapsnap %s - Mudlet map snapshot tool\n\n", version)
 	fmt.Println("Usage:")
 	fmt.Println("  mapsnap -map <file.map> [options]")
-	fmt.Println("\nOptions:")
-	flag.PrintDefaults()
+	fmt.Println("\nGeneral Options:")
+	fmt.Println("  -map string       Path to Mudlet map file (.map)")
+	fmt.Println("  -validate         Validate map integrity")
+	fmt.Println("  -stats            Show map statistics")
+	fmt.Println("  -dump-json string Export map to JSON")
+	fmt.Println("  -examine          Examine binary structure")
+	fmt.Println("  -debug            Enable debug output")
+	fmt.Println("  -timeout int      Timeout in seconds (default 30)")
+	fmt.Println("\nRendering Options:")
+	fmt.Println("  -room int         Room ID to center the map on")
+	fmt.Println("  -output string    Output file path (.webp or .png)")
+	fmt.Println("  -width int        Output image width (default 800)")
+	fmt.Println("  -height int       Output image height (default 600)")
+	fmt.Println("  -radius int       Rendering radius in rooms (default 15)")
+	fmt.Println("  -room-size int    Room size in pixels (default 20)")
+	fmt.Println("  -room-spacing int Room spacing in pixels (default 25)")
+	fmt.Println("  -quality float    WEBP quality 0-100 (default 85)")
+	fmt.Println("  -round            Draw rooms as circles")
 	fmt.Println("\nExamples:")
+	fmt.Println("  mapsnap -map arkadia.map -stats")
+	fmt.Println("  mapsnap -map arkadia.map -validate")
 	fmt.Println("  mapsnap -map arkadia.map -dump-json map.json")
-	fmt.Println("  mapsnap -map arkadia.map -validate -stats")
 	fmt.Println("  mapsnap -map arkadia.map -room 1234 -output map.webp")
-	fmt.Println("  mapsnap -map arkadia.map -timeout 60 -stats")
+	fmt.Println("  mapsnap -map arkadia.map -room 1234 -output map.png -width 1200 -height 900")
+	fmt.Println("  mapsnap -map arkadia.map -room 1234 -output map.webp -radius 20 -round")
 }

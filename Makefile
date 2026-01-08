@@ -6,6 +6,7 @@
 # Allow overriding via environment: e.g. GOOS=linux GOARCH=amd64 make
 GOOS ?=
 GOARCH ?=
+# CGO is not required - using pure Go nativewebp library
 CGO_ENABLED ?= 0
 
 # Output binary name in project root
@@ -17,7 +18,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # Common build flags
 BUILD_FLAGS := -trimpath
 LDFLAGS := -s -w -X main.version=$(VERSION)
-# Force static linking (no dynamic libs) and disable cgo via environment
+# Force static linking (no dynamic libs)
 
 # Find all Go source files for dependency tracking
 GO_SOURCES := $(shell find . -name '*.go' -type f)
