@@ -379,6 +379,21 @@ func (ctx *examineContext) skipQVector3D() error {
 	return nil
 }
 
+func (ctx *examineContext) skipQPixmap() error {
+	// QPixmap is serialized as: quint32 (marker) + PNG data
+	// We look for PNG signature and scan until IEND chunk
+	_, _ = ctx.r.ReadUInt32() // marker
+	if sig, _ := ctx.r.Peek(4); len(sig) == 4 {
+		// Check PNG signature: 0x89504E47
+		if uint32(sig[0])<<24|uint32(sig[1])<<16|uint32(sig[2])<<8|uint32(sig[3]) == 0x89504e47 {
+			if err := ctx.skipPNG(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // --- MudletAreas ---
 
 type areaInfo struct {
@@ -427,7 +442,7 @@ func (ctx *examineContext) readMudletAreas() (*areasResult, error) {
 func (ctx *examineContext) readMudletArea() (*areaInfo, error) {
 	info := &areaInfo{}
 
-	// rooms: QList<quint32>
+	// rooms: QSet<quint32> (v18+) or QList<int> (older)
 	roomCount, err := ctx.r.ReadInt32()
 	if err != nil {
 		return nil, err
@@ -451,19 +466,20 @@ func (ctx *examineContext) readMudletArea() (*areaInfo, error) {
 		}
 	}
 
-	// coordinates: count + 3 ints per entry
-	coordCount, err := ctx.r.ReadInt32()
+	// mAreaExits: QMultiMap<int, QPair<int, int>>
+	// (key=in_area room id, pair.first=out_of_area room id, pair.second=direction)
+	areaExitsCount, err := ctx.r.ReadInt32()
 	if err != nil {
 		return nil, err
 	}
-	for i := 0; i < int(coordCount); i++ {
-		if _, err := ctx.r.ReadInt32(); err != nil {
+	for i := 0; i < int(areaExitsCount); i++ {
+		if _, err := ctx.r.ReadInt32(); err != nil { // key
 			return nil, err
 		}
-		if _, err := ctx.r.ReadInt32(); err != nil {
+		if _, err := ctx.r.ReadInt32(); err != nil { // pair.first
 			return nil, err
 		}
-		if _, err := ctx.r.ReadInt32(); err != nil {
+		if _, err := ctx.r.ReadInt32(); err != nil { // pair.second
 			return nil, err
 		}
 	}
@@ -473,41 +489,48 @@ func (ctx *examineContext) readMudletArea() (*areaInfo, error) {
 		return nil, err
 	}
 
-	// bounds: 6 x int32
+	// bounds: max_x, max_y, max_z, min_x, min_y, min_z (6 x int32)
 	for i := 0; i < 6; i++ {
 		if _, err := ctx.r.ReadInt32(); err != nil {
 			return nil, err
 		}
 	}
 
-	// span: QVector3D
+	// span: QVector3D (3 x double)
 	if err := ctx.skipQVector3D(); err != nil {
 		return nil, err
 	}
 
-	// 4 grid maps
+	// xmaxForZ, ymaxForZ, xminForZ, yminForZ: 4 x QMap<int,int>
 	for i := 0; i < 4; i++ {
 		if _, err := ctx.skipQMapIntInt(); err != nil {
 			return nil, err
 		}
 	}
 
-	// offset: QVector3D
+	// pos: QVector3D (3 x double)
 	if err := ctx.skipQVector3D(); err != nil {
 		return nil, err
 	}
 
-	// isZLocked: bool
+	// isZone: bool
 	if _, err := ctx.r.ReadBool(); err != nil {
 		return nil, err
 	}
 
-	// min_z: int32
+	// zoneAreaRef: int32
 	if _, err := ctx.r.ReadInt32(); err != nil {
 		return nil, err
 	}
 
-	// userData: QMap<QString,QString>
+	// mLast2DMapZoom: double (version >= 21 only)
+	if ctx.version >= 21 {
+		if _, err := ctx.r.ReadDouble(); err != nil {
+			return nil, err
+		}
+	}
+
+	// mUserData: QMap<QString,QString>
 	userDataCount, err := ctx.r.ReadInt32()
 	if err != nil {
 		return nil, err
@@ -519,6 +542,53 @@ func (ctx *examineContext) readMudletArea() (*areaInfo, error) {
 		}
 		if _, err := ctx.r.ReadQString(); err != nil {
 			return nil, err
+		}
+	}
+
+	// mMapLabels (version >= 21 only) - labels stored inside area
+	if ctx.version >= 21 {
+		labelsCount, err := ctx.r.ReadInt32()
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < int(labelsCount); i++ {
+			// labelId: int32
+			if _, err := ctx.r.ReadInt32(); err != nil {
+				return nil, err
+			}
+			// label.pos: QVector3D (version 21+ stores this differently)
+			if err := ctx.skipQVector3D(); err != nil {
+				return nil, err
+			}
+			// label.size: QSizeF (2 x double)
+			if _, err := ctx.r.ReadDouble(); err != nil {
+				return nil, err
+			}
+			if _, err := ctx.r.ReadDouble(); err != nil {
+				return nil, err
+			}
+			// label.text: QString
+			if _, err := ctx.r.ReadQString(); err != nil {
+				return nil, err
+			}
+			// label.fgColor, label.bgColor: 2 x QColor
+			if err := ctx.skipQColor(); err != nil {
+				return nil, err
+			}
+			if err := ctx.skipQColor(); err != nil {
+				return nil, err
+			}
+			// label.pix: QPixmap
+			if err := ctx.skipQPixmap(); err != nil {
+				return nil, err
+			}
+			// label.noScaling, label.showOnTop: 2 x bool
+			if _, err := ctx.r.ReadBool(); err != nil {
+				return nil, err
+			}
+			if _, err := ctx.r.ReadBool(); err != nil {
+				return nil, err
+			}
 		}
 	}
 

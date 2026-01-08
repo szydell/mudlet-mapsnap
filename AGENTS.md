@@ -50,12 +50,31 @@ arkadia-mapsnap/
 The map file uses Qt's QDataStream serialization (big-endian).
 
 **Key structures:**
-1. **MudletMap** - version → envColors → areaNames → customEnvColors → mpRoomDbHashToRoomId → mUserData → mapSymbolFont → areas → labels → rooms
+1. **MudletMap** - version → envColors → areaNames → customEnvColors → mpRoomDbHashToRoomId → mUserData → mapSymbolFont → areas → mRoomIdHash → labels → rooms
 2. **QString** - quint32 length (BYTES, not chars) + UTF-16BE data. 0xFFFFFFFF = null string
 3. **QMap<K,V>** - qint32 count + key-value pairs
 4. **MudletRoom** - 12 standard exits + special exits, environment, weight, name, userData (see detailed structure below)
-5. **MudletLabel** - id, pos(3×double), 2×dummy(double), size(2×double), text, colors, pixmap, flags
-6. **MudletArea** - rooms list, zLevels, span coords, userData, mIsDirty
+5. **MudletLabel** - id, pos(3×double), dummy(2×double), size(2×double), text, colors, pixmap, flags
+6. **MudletArea** - rooms, zLevels, mAreaExits, gridMode, bounds, span, grid maps, pos, isZone, zoneAreaRef, userData
+
+### MudletArea structure (version 20)
+```
+MudletArea:
+  QSet<uint32> rooms           # Room IDs in this area (QList<int> in v<18)
+  QList<int>   zLevels         # Z-levels used in this area
+  QMultiMap<int, QPair<int,int>> mAreaExits  # Area border exits
+                               # key=in_area room, pair=(out_area room, direction)
+  bool         gridMode        # Grid display mode
+  int32        max_x, max_y, max_z, min_x, min_y, min_z  # Bounding box
+  QVector3D    span            # 3 x double
+  QMap<int,int> xmaxForZ, ymaxForZ, xminForZ, yminForZ  # Per-Z bounds
+  QVector3D    pos             # Area position (3 x double)
+  bool         isZone          # Is this area a zone?
+  int32        zoneAreaRef     # Reference to zone area
+  # double     mLast2DMapZoom  # Only version >= 21
+  QMap<QString,QString> mUserData
+  # mMapLabels                 # Only version >= 21 (labels inside area)
+```
 
 ### MudletRoom structure (version 20)
 ```
@@ -101,6 +120,21 @@ MudletRoom:
   QMap<QString, int> doors           # version >= 16
 ```
 
+### MudletLabel structure (version 11-20)
+```
+MudletLabel:
+  int32     labelID
+  QVector3D pos            # 3 x double (v12+, earlier: QPointF = 2 x double)
+  QPointF   dummy          # 2 x double (unused, removed in v21)
+  QSizeF    size           # 2 x double (width, height)
+  QString   text           # Label text
+  QColor    fgColor        # Foreground color
+  QColor    bgColor        # Background color  
+  QPixmap   pix            # Image data (often PNG)
+  bool      noScaling      # version >= 15
+  bool      showOnTop      # version >= 15
+```
+
 ### Room connections
 Rooms are linked through:
 1. **12 standard exits** - each points to destination room ID (-1 = no exit)
@@ -112,6 +146,7 @@ Rooms are linked through:
 - MudletLabel has 7 doubles before QString (not 5 or 6)
 - Always use `bufio.Reader` for performance
 - Version-dependent fields: symbolColor (v21+), specialExits format changes at v21
+- Area structure differs significantly between v20 and v21 (labels moved inside area)
 
 ## CLI usage
 
