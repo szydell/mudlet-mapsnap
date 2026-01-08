@@ -704,10 +704,22 @@ func (r *Renderer) drawOtherLevelRooms(img *image.RGBA, rooms []*mapparser.Mudle
 }
 
 // getEnvColor returns the color for an environment ID
+// Mudlet behavior: if env is not in mEnvColors AND not in mCustomEnvColors,
+// it defaults to env=1 (red). We replicate this behavior.
 func (r *Renderer) getEnvColor(env int32, customColors map[int32]color.RGBA) color.RGBA {
+	// First check mEnvColors mapping
 	if mappedEnv, ok := r.mapData.EnvColors[env]; ok {
 		env = mappedEnv
 	}
+
+	// If env is NOT a default color (1-16) and NOT in customColors,
+	// fall back to env=1 (red) like Mudlet does
+	_, isDefault := r.config.DefaultEnvColors[env]
+	_, isCustom := customColors[env]
+	if !isDefault && !isCustom {
+		env = 1 // Default to red
+	}
+
 	return envToColor(env, customColors, r.config.DefaultEnvColors)
 }
 

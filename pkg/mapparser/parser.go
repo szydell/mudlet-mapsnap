@@ -769,16 +769,40 @@ func (p *parser) readQPixmap() ([]byte, error) {
 		return nil, nil
 	}
 
+	// PNG signature: 0x89 'P' 'N' 'G'
 	if uint32(sig[0])<<24|uint32(sig[1])<<16|uint32(sig[2])<<8|uint32(sig[3]) != 0x89504e47 {
 		return nil, nil
 	}
 
-	// Read PNG data until IEND
-	if err := p.skipPNG(); err != nil {
-		return nil, err
-	}
+	// Read PNG data until IEND + CRC
+	return p.readPNG()
+}
 
-	return nil, nil
+func (p *parser) readPNG() ([]byte, error) {
+	var buf []byte
+	needle := []byte{0x49, 0x45, 0x4e, 0x44} // 'I','E','N','D'
+	for {
+		peek, err := p.r.Peek(4)
+		if err != nil || len(peek) < 4 {
+			return buf, err
+		}
+		if peek[0] == needle[0] && peek[1] == needle[1] && peek[2] == needle[2] && peek[3] == needle[3] {
+			// Read IEND + 4-byte CRC (8 bytes total)
+			for i := 0; i < 8; i++ {
+				b, err := p.r.ReadByte()
+				if err != nil {
+					return buf, err
+				}
+				buf = append(buf, b)
+			}
+			return buf, nil
+		}
+		b, err := p.r.ReadByte()
+		if err != nil {
+			return buf, err
+		}
+		buf = append(buf, b)
+	}
 }
 
 func (p *parser) skipPNG() error {
