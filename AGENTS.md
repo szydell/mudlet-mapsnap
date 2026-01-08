@@ -1,11 +1,11 @@
-# AI Assistant instructions for arkadia-mapsnap
+# AI Assistant instructions for mudlet-mapsnap
 
 ## Project overview
 
-**arkadia-mapsnap** is a Go library and CLI tool for parsing and visualizing Mudlet map files from the Polish MUD game "Arkadia". The project enables generating visual map fragments centered on selected locations.
+**mudlet-mapsnap** is a Go library and CLI tool for parsing and visualizing Mudlet map files. The project enables generating visual map fragments centered on selected locations.
 
 ### Problem solved
-- Players use Mudlet as their MUD client
+- Mudlet is a popular MUD client used by players of various text-based games
 - Mudlet stores maps in a binary format (QDataStream) that's difficult to process
 - Need for quick generation of visual map fragments for navigation and sharing
 
@@ -23,7 +23,7 @@
 ## Project structure
 
 ```
-arkadia-mapsnap/
+mudlet-mapsnap/
 ├── cmd/mapsnap/           # CLI application
 │   ├── main.go           # Entry point and flags
 │   └── examine.go        # Binary examination with Qt/MudletMap parsing
@@ -153,22 +153,22 @@ Rooms are linked through:
 
 ```bash
 # Parse and show stats
-./mapsnap -map arkadia.map -stats
+./mapsnap -map world.map -stats
 
 # Validate map
-./mapsnap -map arkadia.map -validate
+./mapsnap -map world.map -validate
 
 # Export to JSON
-./mapsnap -map arkadia.map -dump-json output.json
+./mapsnap -map world.map -dump-json output.json
 
 # Examine binary structure (compact summary)
-./mapsnap -map arkadia.map -examine
+./mapsnap -map world.map -examine
 
 # Examine with detailed output (offsets, all values)
-./mapsnap -map arkadia.map -examine -debug
+./mapsnap -map world.map -examine -debug
 
 # Generate map fragment (target functionality)
-./mapsnap -map arkadia.map -room 1234 -output fragment.webp
+./mapsnap -map world.map -room 1234 -output fragment.webp
 ```
 
 ### Flags
@@ -249,7 +249,7 @@ func example(path string) (err error) {
 - Avoid redundant scanning - move forward systematically
 
 ### Testing
-- Test with real Arkadia map files
+- Test with real Mudlet map files
 - Compare results with Node.js parser reference
 - Use fixtures in `tests/fixtures/`
 

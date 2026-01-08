@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/szydell/arkadia-mapsnap/pkg/mapparser"
+	"github.com/szydell/mudlet-mapsnap/pkg/mapparser"
 )
 
 // ExamineFile examines a binary map file and displays its Qt/MudletMap structure.

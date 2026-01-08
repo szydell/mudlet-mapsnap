@@ -5,7 +5,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/szydell/arkadia-mapsnap/pkg/mapparser"
+	"github.com/szydell/mudlet-mapsnap/pkg/mapparser"
 )
 
 func TestDefaultConfig(t *testing.T) {

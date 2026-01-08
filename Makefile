@@ -1,4 +1,4 @@
-# Makefile for arkadia-mapsnap
+# Makefile for mudlet-mapsnap
 # Builds a static mapsnap binary in the project root
 
 .PHONY: all clean build

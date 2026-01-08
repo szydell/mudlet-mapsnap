@@ -10,7 +10,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/szydell/arkadia-mapsnap/pkg/mapparser"
+	"github.com/szydell/mudlet-mapsnap/pkg/mapparser"
 )
 
 // Renderer handles map rendering operations

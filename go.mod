@@ -1,4 +1,4 @@
-module github.com/szydell/arkadia-mapsnap
+module github.com/szydell/mudlet-mapsnap
 
 go 1.25
 

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/szydell/arkadia-mapsnap/pkg/mapparser"
-	"github.com/szydell/arkadia-mapsnap/pkg/maprenderer"
+	"github.com/szydell/mudlet-mapsnap/pkg/mapparser"
+	"github.com/szydell/mudlet-mapsnap/pkg/maprenderer"
 )
 
 var (
@@ -230,7 +230,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Printf("arkadia-mapsnap %s - Mudlet map snapshot tool\n\n", version)
+	fmt.Printf("mudlet-mapsnap %s - Mudlet map snapshot tool\n\n", version)
 	fmt.Println("Usage:")
 	fmt.Println("  mapsnap -map <file.map> [options]")
 	fmt.Println("\nGeneral Options:")
@@ -252,10 +252,10 @@ func printUsage() {
 	fmt.Println("  -quality float    WEBP quality 0-100 (default 85)")
 	fmt.Println("  -round            Draw rooms as circles")
 	fmt.Println("\nExamples:")
-	fmt.Println("  mapsnap -map arkadia.map -stats")
-	fmt.Println("  mapsnap -map arkadia.map -validate")
-	fmt.Println("  mapsnap -map arkadia.map -dump-json map.json")
-	fmt.Println("  mapsnap -map arkadia.map -room 1234 -output map.webp")
-	fmt.Println("  mapsnap -map arkadia.map -room 1234 -output map.png -width 1200 -height 900")
-	fmt.Println("  mapsnap -map arkadia.map -room 1234 -output map.webp -radius 20 -round")
+	fmt.Println("  mapsnap -map world.map -stats")
+	fmt.Println("  mapsnap -map world.map -validate")
+	fmt.Println("  mapsnap -map world.map -dump-json map.json")
+	fmt.Println("  mapsnap -map world.map -room 1234 -output map.webp")
+	fmt.Println("  mapsnap -map world.map -room 1234 -output map.png -width 1200 -height 900")
+	fmt.Println("  mapsnap -map world.map -room 1234 -output map.webp -radius 20 -round")
 }

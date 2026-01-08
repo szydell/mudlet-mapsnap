@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/szydell/arkadia-mapsnap/pkg/mapparser"
+	"github.com/szydell/mudlet-mapsnap/pkg/mapparser"
 )
 
 // Test fixtures paths

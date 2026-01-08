@@ -1,10 +1,10 @@
-# arkadia-mapsnap
+# mudlet-mapsnap
 
-A Go library and CLI tool for parsing and visualizing Mudlet map files from the Polish MUD game "Arkadia".
+A Go library and CLI tool for parsing and visualizing Mudlet map files.
 
 ## Description
 
-**arkadia-mapsnap** parses Mudlet's binary map files (QDataStream format, version 20) and provides:
+**mudlet-mapsnap** parses Mudlet's binary map files (QDataStream format, version 20) and provides:
 - Map file parsing and validation
 - Room, area, and environment extraction
 - JSON export for analysis
@@ -18,8 +18,8 @@ A Go library and CLI tool for parsing and visualizing Mudlet map files from the 
 
 ### Building from source
 ```bash
-git clone https://github.com/szydell/arkadia-mapsnap.git
-cd arkadia-mapsnap
+git clone https://github.com/szydell/mudlet-mapsnap.git
+cd mudlet-mapsnap
 make build
 # or: go build -o mapsnap ./cmd/mapsnap
 ```
@@ -28,22 +28,22 @@ make build
 
 ```bash
 # Parse and show statistics
-./mapsnap -map arkadia.map -stats
+./mapsnap -map world.map -stats
 
 # Validate map integrity
-./mapsnap -map arkadia.map -validate
+./mapsnap -map world.map -validate
 
 # Export to JSON
-./mapsnap -map arkadia.map -dump-json output.json
+./mapsnap -map world.map -dump-json output.json
 
 # Examine binary structure (compact summary)
-./mapsnap -map arkadia.map -examine
+./mapsnap -map world.map -examine
 
 # Examine with detailed output (offsets, all values)
-./mapsnap -map arkadia.map -examine -debug
+./mapsnap -map world.map -examine -debug
 
 # Generate map fragment (target functionality)
-./mapsnap -map arkadia.map -room 1234 -output fragment.webp
+./mapsnap -map world.map -room 1234 -output fragment.webp
 ```
 
 ### Command-line flags
@@ -72,7 +72,7 @@ make build
 ## Project Structure
 
 ```
-arkadia-mapsnap/
+mudlet-mapsnap/
 ├── cmd/mapsnap/       # CLI application
 ├── pkg/
 │   ├── mapparser/     # Map file parsing
