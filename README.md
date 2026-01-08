@@ -36,9 +36,11 @@ make build
 # Export to JSON
 ./mapsnap -map arkadia.map -dump-json output.json
 
-# Examine binary structure
+# Examine binary structure (compact summary)
 ./mapsnap -map arkadia.map -examine
-./mapsnap -map arkadia.map -examine-qt
+
+# Examine with detailed output (offsets, all values)
+./mapsnap -map arkadia.map -examine -debug
 
 # Generate map fragment (target functionality)
 ./mapsnap -map arkadia.map -room 1234 -output fragment.webp
@@ -52,9 +54,8 @@ make build
 -dump-json string Export map to JSON
 -validate         Validate map integrity
 -stats            Show map statistics
--debug            Enable debug output
--examine          Examine binary structure
--examine-qt       Examine Qt/MudletMap sections
+-debug            Enable debug output (verbose mode for -examine)
+-examine          Examine binary structure of map file
 -timeout int      Timeout in seconds (default 30)
 ```
 

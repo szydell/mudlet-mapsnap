@@ -25,8 +25,7 @@
 arkadia-mapsnap/
 ├── cmd/mapsnap/           # CLI application
 │   ├── main.go           # Entry point and flags
-│   ├── examine.go        # Binary examination tools
-│   └── examine_qt.go     # Qt-specific examination
+│   └── examine.go        # Binary examination with Qt/MudletMap parsing
 ├── pkg/
 │   ├── mapparser/        # Map file parsing
 │   │   ├── parser.go     # Main parser
@@ -51,17 +50,68 @@ arkadia-mapsnap/
 The map file uses Qt's QDataStream serialization (big-endian).
 
 **Key structures:**
-1. **MudletMap** - version → envColors → areaNames → customEnvColors → areas → rooms → labels
+1. **MudletMap** - version → envColors → areaNames → customEnvColors → mpRoomDbHashToRoomId → mUserData → mapSymbolFont → areas → labels → rooms
 2. **QString** - quint32 length (BYTES, not chars) + UTF-16BE data. 0xFFFFFFFF = null string
 3. **QMap<K,V>** - qint32 count + key-value pairs
-4. **MudletRoom** - 16 standard exits + special exits, environment, weight, name, userData
+4. **MudletRoom** - 12 standard exits + special exits, environment, weight, name, userData (see detailed structure below)
 5. **MudletLabel** - id, pos(3×double), 2×dummy(double), size(2×double), text, colors, pixmap, flags
+6. **MudletArea** - rooms list, zLevels, span coords, userData, mIsDirty
+
+### MudletRoom structure (version 20)
+```
+MudletRoom:
+  int32   area           # ID of parent area
+  int32   x, y, z        # Position on map grid
+  int32   north          # -1 = no exit, otherwise destination room ID
+  int32   northeast
+  int32   east
+  int32   southeast
+  int32   south
+  int32   southwest
+  int32   west
+  int32   northwest
+  int32   up
+  int32   down
+  int32   in
+  int32   out
+  int32   environment    # Environment type (for coloring)
+  int32   weight         # Pathfinding weight (min 1)
+  QString name           # Room name/label
+  bool    isLocked       # Whether room is locked
+  
+  # Special exits (version 6-20): QMultiMap<int, QString>
+  # Key = destination room ID, Value = command with "0"/"1" lock prefix
+  # Version 21+: QMultiMap<QString, int> (reversed)
+  
+  QString symbol         # Map symbol (version >= 19)
+  # QColor symbolColor   # Only in version >= 21
+  
+  QMap<QString, QString> userData    # version >= 10
+  
+  # Custom lines (version >= 11, format differs v20 vs older):
+  QMap<QString, QList<QPointF>> customLines
+  QMap<QString, bool> customLinesArrow
+  QMap<QString, QColor> customLinesColor     # v20+: QColor, older: QList<int>
+  QMap<QString, int> customLinesStyle        # v20+: int, older: QString
+  
+  # QSet<QString> mSpecialExitLocks  # Only version >= 21
+  QList<int> exitLocks               # version >= 11
+  QList<int> exitStubs               # version >= 13
+  QMap<QString, int> exitWeights     # version >= 16
+  QMap<QString, int> doors           # version >= 16
+```
+
+### Room connections
+Rooms are linked through:
+1. **12 standard exits** - each points to destination room ID (-1 = no exit)
+2. **Special exits** - custom commands for non-standard movement
 
 ### Critical pitfalls
 - QString length is in BYTES (must be even for UTF-16)
 - QPixmap often contains inline PNG - scan for IEND + skip 4-byte CRC
 - MudletLabel has 7 doubles before QString (not 5 or 6)
 - Always use `bufio.Reader` for performance
+- Version-dependent fields: symbolColor (v21+), specialExits format changes at v21
 
 ## CLI usage
 
@@ -75,9 +125,11 @@ The map file uses Qt's QDataStream serialization (big-endian).
 # Export to JSON
 ./mapsnap -map arkadia.map -dump-json output.json
 
-# Examine binary structure
+# Examine binary structure (compact summary)
 ./mapsnap -map arkadia.map -examine
-./mapsnap -map arkadia.map -examine-qt
+
+# Examine with detailed output (offsets, all values)
+./mapsnap -map arkadia.map -examine -debug
 
 # Generate map fragment (target functionality)
 ./mapsnap -map arkadia.map -room 1234 -output fragment.webp
@@ -91,10 +143,39 @@ The map file uses Qt's QDataStream serialization (big-endian).
 -dump-json string Export to JSON
 -validate         Validate map integrity
 -stats            Show statistics
--debug            Enable debug output
--examine          Examine binary structure
--examine-qt       Examine Qt/MudletMap sections
+-debug            Enable debug output (verbose mode for -examine)
+-examine          Examine binary structure of map file
 -timeout int      Timeout in seconds (default 30)
+```
+
+### The -examine command
+
+The `-examine` flag walks through the binary map file and displays its structure.
+
+**Compact mode** (`-examine`):
+```
+MudletMap.version:
+  version = 20
+areaNames QMap<int,QString>:
+  count = 61
+areas MudletAreas:
+  count = 64 areas, total rooms = 26758
+labels MudletLabels:
+  areas with labels = 51, total labels = 397
+rooms MudletRooms:
+  total rooms = 26758
+```
+
+**Debug mode** (`-examine -debug`):
+- Shows byte offsets for each section (e.g., `@1058553: rooms MudletRooms`)
+- Lists all area names with IDs
+- Shows detailed area info (room counts, z-levels, bounding box)
+- Lists all labels with position, size, text, PNG bytes, and flags
+- Shows first 5 rooms with full details (exits, name, environment, etc.)
+
+Example room output:
+```
+id=15951 area=30 pos=(82,-9,0) exits=[ne:15950,e:15949,sw:15952,nw:15966] name='15951' env=303
 ```
 
 ### Environment variables
