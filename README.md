@@ -9,7 +9,7 @@ A Go library and CLI tool for parsing and visualizing Mudlet map files from the 
 - Room, area, and environment extraction
 - JSON export for analysis
 - Binary structure examination tools
-- (In progress) Visual map fragment rendering to WEBP
+- Visual map fragment rendering to WEBP/PNG (pure Go, no CGO required)
 
 ## Installation
 
@@ -50,7 +50,13 @@ make build
 ```
 -map string       Path to Mudlet map file (.map/.dat)
 -room int         Room ID to center on
--output string    Output file path
+-output string    Output file path (supports .webp and .png)
+-radius int       Rendering radius in rooms (default 15)
+-width int        Output image width (default 800)
+-height int       Output image height (default 600)
+-room-size int    Room size in pixels (default 20)
+-room-spacing int Room spacing in pixels (default 25)
+-round            Draw rooms as circles instead of squares
 -dump-json string Export map to JSON
 -validate         Validate map integrity
 -stats            Show map statistics
@@ -83,15 +89,17 @@ arkadia-mapsnap/
 - Map validation and statistics
 - JSON export
 - Binary structure examination tools
-
-### In Progress
-- Visual map rendering to WEBP
-- Configurable rendering styles
+- Visual map rendering to WEBP/PNG (pure Go, no CGO)
+- Labels with PNG pixmaps
+- Mudlet-compatible environment colors
+- Contrast-aware room symbol colors
+- Configurable rendering (size, spacing, radius, round rooms)
 
 ### Planned
 - HTTP API server
-- Multiple output formats (PNG, SVG)
+- SVG output format
 - Batch processing
+- YAML configuration files
 
 ## Documentation
 

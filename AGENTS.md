@@ -17,7 +17,8 @@
 
 - **Go 1.25+**
 - **QDataStream binary format** (Qt serialization)
-- **Image output**: WEBP format (planned)
+- **Image output**: WEBP (lossless, via `nativewebp`) and PNG
+- **Pure Go**: No CGO required, fully static binary
 
 ## Project structure
 
@@ -276,15 +277,17 @@ Working Node.js implementation:
 - [x] Map validation and stats
 - [x] JSON export
 - [x] Debug/examine tools
-- [ ] Basic WEBP renderer
-- [ ] Unit tests
+- [x] WEBP/PNG renderer (pure Go)
+- [x] Labels with PNG pixmaps
+- [x] Mudlet-compatible colors
+- [x] Unit tests
 
 ### Phase 2: Features
-- [ ] Configurable rendering styles
 - [ ] Batch processing
 - [ ] YAML configuration files
+- [ ] Custom line rendering
 
 ### Phase 3: Extended
 - [ ] HTTP API server
-- [ ] Multiple output formats (PNG, SVG)
+- [ ] SVG output format
 - [ ] Docker images
