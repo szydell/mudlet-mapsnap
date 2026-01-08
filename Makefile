@@ -19,11 +19,14 @@ BUILD_FLAGS := -trimpath
 LDFLAGS := -s -w -X main.version=$(VERSION)
 # Force static linking (no dynamic libs) and disable cgo via environment
 
+# Find all Go source files for dependency tracking
+GO_SOURCES := $(shell find . -name '*.go' -type f)
+
 all: $(BINARY)
 
 build: $(BINARY)
 
-$(BINARY):
+$(BINARY): $(GO_SOURCES)
 	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 		go build $(BUILD_FLAGS) -ldflags '$(LDFLAGS) -extldflags "-static"' \
 		-o $(BINARY) ./cmd/mapsnap
