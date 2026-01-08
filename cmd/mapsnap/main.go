@@ -99,20 +99,20 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("Map parsed successfully. Found %d rooms, %d areas, %d environments.\n",
-		len(m.Rooms), len(m.Areas), len(m.Environments))
+		len(m.Rooms), len(m.Areas), len(m.EnvColors)+len(m.CustomEnvColors))
 
 	// Print debug information if requested
 	if *debug {
 		fmt.Println("\nDebug Information:")
-		fmt.Printf("Map Version: %d\n", m.Header.Version)
-		fmt.Printf("Magic String: %s\n", m.Header.Magic)
+		fmt.Printf("Map Version: %d\n", m.Version)
 
 		// Print first 5 rooms for debugging
 		fmt.Println("\nSample Rooms:")
 		count := 0
 		for id, room := range m.Rooms {
+			activeExits := room.ActiveExits()
 			fmt.Printf("Room %d: %s at (%d,%d,%d) with %d exits\n",
-				id, room.Name, room.X, room.Y, room.Z, len(room.Exits))
+				id, room.Name, room.X, room.Y, room.Z, len(activeExits))
 			count++
 			if count >= 5 {
 				break

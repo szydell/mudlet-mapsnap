@@ -9,28 +9,27 @@ import (
 
 // ValidateMap performs a minimal validation of the parsed map structure.
 // This is a stub implementation intended to unblock compilation and basic CLI flows.
-// It checks for a valid header and that exit TargetIDs (if positive) refer to existing rooms.
+// It checks for a valid version and that exit targets (if not NoExit) refer to existing rooms.
 func ValidateMap(m *Map) []ValidationError {
 	var errs []ValidationError
 	if m == nil {
 		errs = append(errs, ValidationError{Type: "nil_map", Message: "map is nil"})
 		return errs
 	}
-	// Accept either legacy placeholder magic or empty (QDataStream has no magic)
-	// We only warn if magic is a non-empty unexpected value
-	if m.Header.Magic != "" && m.Header.Magic != "ATADNOOM" {
-		errs = append(errs, ValidationError{Type: "unexpected_magic", Message: fmt.Sprintf("magic: %q", m.Header.Magic)})
+	// Mudlet QDataStream version is typically >= 6; just ensure positive
+	if m.Version <= 0 {
+		errs = append(errs, ValidationError{Type: "invalid_version", Message: fmt.Sprintf("non-positive version: %d", m.Version)})
 	}
-	// Mudlet QDataStream version is typically >= 20; just ensure positive
-	if m.Header.Version <= 0 {
-		errs = append(errs, ValidationError{Type: "invalid_version", Message: fmt.Sprintf("non-positive version: %d", m.Header.Version)})
-	}
-	// Check that exits point to existing rooms when TargetID > 0
+	// Check that exits point to existing rooms when not NoExit
 	for _, room := range m.Rooms {
-		for _, ex := range room.Exits {
-			if ex.TargetID > 0 {
-				if _, ok := m.Rooms[ex.TargetID]; !ok {
-					errs = append(errs, ValidationError{Type: "broken_exit", Message: fmt.Sprintf("room %d has exit to missing room %d", room.ID, ex.TargetID), RoomID: room.ID})
+		for i, exitTarget := range room.Exits {
+			if exitTarget != NoExit {
+				if _, ok := m.Rooms[exitTarget]; !ok {
+					errs = append(errs, ValidationError{
+						Type:    "broken_exit",
+						Message: fmt.Sprintf("room %d has %s exit to missing room %d", room.ID, ExitDirectionNames[i], exitTarget),
+						RoomID:  room.ID,
+					})
 				}
 			}
 		}
@@ -46,7 +45,7 @@ func GetMapStats(m *Map) MapStats {
 	}
 	stats.TotalRooms = len(m.Rooms)
 	stats.TotalAreas = len(m.Areas)
-	stats.TotalEnvironments = len(m.Environments)
+	stats.TotalEnvironments = len(m.EnvColors) + len(m.CustomEnvColors)
 	if len(m.Rooms) == 0 {
 		return stats
 	}

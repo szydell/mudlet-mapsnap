@@ -1,16 +1,14 @@
 package mapparser
 
 import (
-	"bufio"
 	"errors"
-
 	"fmt"
 	"io"
 	"os"
 )
 
-// ParseMapFile parses a Mudlet map file and returns a Map structure
-func ParseMapFile(filename string) (m *Map, err error) {
+// ParseMapFile parses a Mudlet map file and returns a MudletMap structure.
+func ParseMapFile(filename string) (m *MudletMap, err error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("opening map file: %w", err)
@@ -26,460 +24,1274 @@ func ParseMapFile(filename string) (m *Map, err error) {
 		}
 	}()
 
-	m, err = ParseMap(file)
-	return m, err
+	return ParseMap(file)
 }
 
-// ParseMap parses a Mudlet map from an io.Reader
-func ParseMap(reader io.Reader) (*Map, error) {
-	// Wrap in bufio.Reader so we can use parseHeader
-	br := bufio.NewReader(reader)
-
-	// Initialize map structure
-	m := &Map{
-		Rooms:        make(map[int32]*Room),
-		Areas:        make(map[int32]*Area),
-		Environments: []Environment{},
-		CustomLines:  []CustomLine{},
-		Labels:       []Label{},
+// ParseMap parses a Mudlet map from an io.Reader.
+func ParseMap(reader io.Reader) (*MudletMap, error) {
+	p := &parser{
+		r: NewBinaryReader(reader),
+		m: NewMudletMap(),
 	}
 
-	// Parse and validate header now; then try to parse areas (QMap<int, QString>)
-	if err := parseHeader(br, &m.Header); err != nil {
+	if err := p.parse(); err != nil {
 		return nil, err
 	}
 
-	// According to Node.js reference (MudletMap serialization), the stream continues with:
-	// envColors: QMap(QInt, QInt), then areaNames: QMap(QInt, QString, sorted), then other fields.
-	// We'll parse envColors (ignored for now) and areaNames to populate Areas.
-	qt := NewBinaryReader(br)
-	// debug helper
-	debugOn := os.Getenv("MAPSNAP_DEBUG") == "1"
-	dbg := func(msg string) {
-		if debugOn {
-			fmt.Printf("[parser] @%d %s\n", qt.Position(), msg)
-		}
-	}
-	dbg("after header")
-	// 1) envColors QMap<int,int>
-	if envCount, err := qt.ReadInt32(); err == nil && envCount >= 0 && envCount < 100000 {
-		for i := int32(0); i < envCount; i++ {
-			if _, err := qt.ReadInt32(); err != nil {
-				break
-			}
-			if _, err := qt.ReadInt32(); err != nil {
-				break
-			}
-		}
-	}
-	// 2) areaNames QMap<int, QString>
-	if areaCount, err := qt.ReadInt32(); err == nil && areaCount >= 0 && areaCount < 100000 {
-		areas := make(map[int32]*Area, areaCount)
-		for i := int32(0); i < areaCount; i++ {
-			id, err := qt.ReadInt32()
-			if err != nil {
-				break
-			}
-			name, err := qt.ReadQString()
-			if err != nil {
-				break
-			}
-			areas[id] = &Area{ID: id, Name: name}
-		}
-		if len(areas) > 0 {
-			m.Areas = areas
-		}
-	}
-
-	// 3) mCustomEnvColors QMap<int,QColor> - skip
-	if cnt, err := qt.ReadInt32(); err == nil {
-		for i := int32(0); i < cnt; i++ {
-			if _, err := qt.ReadInt32(); err != nil {
-				break
-			}
-			// QColor: 1 byte spec + 5x uint16
-			if _, err := qt.ReadInt8(); err != nil {
-				break
-			}
-			for j := 0; j < 5; j++ {
-				if _, err := qt.ReadUInt16(); err != nil {
-					break
-				}
-			}
-		}
-	}
-	// 4) mpRoomDbHashToRoomId QMap<QString,QUInt> - skip
-	if cnt, err := qt.ReadInt32(); err == nil {
-		for i := int32(0); i < cnt; i++ {
-			if _, err := qt.ReadQString(); err != nil {
-				break
-			}
-			if _, err := qt.ReadUInt32(); err != nil {
-				break
-			}
-		}
-	}
-	// 5) mUserData QMap<QString,QString> - skip
-	if cnt, err := qt.ReadInt32(); err == nil {
-		for i := int32(0); i < cnt; i++ {
-			if _, err := qt.ReadQString(); err != nil {
-				break
-			}
-			if _, err := qt.ReadQString(); err != nil {
-				break
-			}
-		}
-	}
-	// 6) mapSymbolFont QFont - skip detailed fields
-	if _, err := qt.ReadQString(); err == nil {
-		_, _ = qt.ReadQString()
-		_, _ = qt.ReadDouble()
-		_, _ = qt.ReadInt32()
-		_, _ = qt.ReadInt8()
-		_, _ = qt.ReadUInt16()
-		_, _ = qt.ReadByte()
-		_, _ = qt.ReadInt8()
-		_, _ = qt.ReadInt8()
-		_, _ = qt.ReadUInt16()
-		_, _ = qt.ReadInt8()
-		_, _ = qt.ReadInt32()
-		_, _ = qt.ReadInt32()
-		_, _ = qt.ReadInt8()
-		_, _ = qt.ReadInt8()
-	}
-	// 7) mapFontFudgeFactor (double)
-	_, _ = qt.ReadDouble()
-	// 8) useOnlyMapFont (bool)
-	_, _ = qt.ReadBool()
-
-	// 9) areas: MudletAreas - skip content but consume
-	if cnt, err := qt.ReadInt32(); err == nil {
-		for i := int32(0); i < cnt; i++ {
-			// key id
-			if _, err := qt.ReadInt32(); err != nil {
-				break
-			}
-			// value MudletArea
-			// QList<QUInt>
-			if l, err := qt.ReadInt32(); err == nil {
-				for j := int32(0); j < l; j++ {
-					_, _ = qt.ReadUInt32()
-				}
-			}
-			// QList<QInt>
-			if l, err := qt.ReadInt32(); err == nil {
-				for j := int32(0); j < l; j++ {
-					_, _ = qt.ReadInt32()
-				}
-			}
-			// QMultiMap<int,QPair<int,int>>
-			if l, err := qt.ReadInt32(); err == nil {
-				for j := int32(0); j < l; j++ {
-					_, _ = qt.ReadInt32()
-					_, _ = qt.ReadInt32()
-					_, _ = qt.ReadInt32()
-				}
-			}
-			// gridMode bool
-			_, _ = qt.ReadBool()
-			// six ints
-			for k := 0; k < 6; k++ {
-				_, _ = qt.ReadInt32()
-			}
-			// QVector (3 doubles)
-			for k := 0; k < 3; k++ {
-				_, _ = qt.ReadDouble()
-			}
-			// 4x QMap<int,int>
-			for k := 0; k < 4; k++ {
-				if n, err := qt.ReadInt32(); err == nil {
-					for t := int32(0); t < n; t++ {
-						_, _ = qt.ReadInt32()
-						_, _ = qt.ReadInt32()
-					}
-				}
-			}
-			// QVector
-			for k := 0; k < 3; k++ {
-				_, _ = qt.ReadDouble()
-			}
-			// isZone bool, zoneAreaRef int
-			_, _ = qt.ReadBool()
-			_, _ = qt.ReadInt32()
-			// userData QMap<QString,QString>
-			if n, err := qt.ReadInt32(); err == nil {
-				for t := int32(0); t < n; t++ {
-					_, _ = qt.ReadQString()
-					_, _ = qt.ReadQString()
-				}
-			}
-		}
-	}
-
-	// 10) mRoomIdHash QMap<QString,QInt> - skip
-	if cnt, err := qt.ReadInt32(); err == nil {
-		for i := int32(0); i < cnt; i++ {
-			_, _ = qt.ReadQString()
-			_, _ = qt.ReadInt32()
-		}
-	}
-
-	dbg("before labels")
-	// 11) labels: MudletLabels - skip efficiently (handles embedded PNGs)
-	// Even if MAPSNAP_SKIP_LABELS=1, we prefer structured skipping over heuristic scan for performance.
-	if cnt, err := qt.ReadInt32(); err == nil {
-		for i := int32(0); i < cnt; i++ {
-			if total, err := qt.ReadInt32(); err == nil {
-				_, _ = qt.ReadInt32()
-				for j := int32(0); j < total; j++ { // label entries
-					// Read minimal MudletLabel to skip
-					_, _ = qt.ReadInt32() // id
-					// pos (QVector: 3 doubles), dummy1 (1), dummy2 (1), size (QPair: 2) => total 7 doubles
-					for k := 0; k < 7; k++ {
-						_, _ = qt.ReadDouble()
-					}
-					_, _ = qt.ReadQString() // text
-					// fgColor, bgColor
-					_, _ = qt.ReadInt8()
-					for c := 0; c < 5; c++ {
-						_, _ = qt.ReadUInt16()
-					}
-					_, _ = qt.ReadInt8()
-					for c := 0; c < 5; c++ {
-						_, _ = qt.ReadUInt16()
-					}
-					// QPixMap: read header marker (uint32), then check the next 4 bytes for PNG magic and consume until IEND
-					_, _ = qt.ReadUInt32()
-					if sig, _ := qt.Peek(4); len(sig) == 4 {
-						if uint32(sig[0])<<24|uint32(sig[1])<<16|uint32(sig[2])<<8|uint32(sig[3]) == 0x89504e47 {
-							_ = skipPNG(qt)
-						}
-					}
-					_, _ = qt.ReadBool()
-					_, _ = qt.ReadBool()
-				}
-			}
-		}
-	} else {
-		// Fallback only if we failed to read labels count
-		dbg("labels count read failed, using heuristic skip to rooms")
-		if err := skipToRoomsHeuristic(qt, m.Areas); err != nil {
-			return nil, fmt.Errorf("skipToRoomsHeuristic: %w", err)
-		}
-	}
-
-	dbg("before rooms")
-	// 12) rooms: MudletRooms - parse minimal fields!
-	if err := parseRooms(qt, m); err != nil {
-		return nil, err
-	}
-	dbg("after rooms")
-	return m, nil
+	return p.m, nil
 }
 
-// parseHeader reads the map file header
-// Supports two formats:
-// 1) Legacy placeholder format with magic "ATADNOOM" + 1-byte version
-// 2) Actual Mudlet QDataStream: first value is qint32 version (e.g., 20)
-func parseHeader(reader *bufio.Reader, header *Header) error {
-	// Peek to check for legacy magic
-	if peek, _ := reader.Peek(8); len(peek) == 8 && string(peek) == "ATADNOOM" {
-		// Consume magic
-		magic := make([]byte, 8)
-		if _, err := io.ReadFull(reader, magic); err != nil {
-			return fmt.Errorf("reading magic: %w", err)
-		}
-		header.Magic = string(magic)
-		// Read the 1-byte version
-		versionByte, err := reader.ReadByte()
-		if err != nil {
-			return fmt.Errorf("reading legacy version: %w", err)
-		}
-		header.Version = int8(versionByte)
-		return nil
-	}
-	// Fallback: treat as Qt QDataStream and read qint32 version
-	br := NewBinaryReader(reader)
-	v, err := br.ReadInt32()
+// parser holds state for map parsing operations
+type parser struct {
+	r *BinaryReader
+	m *MudletMap
+}
+
+// parse walks through the entire map file structure
+func (p *parser) parse() error {
+	// version (qint32)
+	version, err := p.r.ReadInt32()
 	if err != nil {
-		return fmt.Errorf("reading Qt version: %w", err)
+		return fmt.Errorf("version: %w", err)
 	}
-	header.Magic = "" // QDataStream has no magic prefix
-	header.Version = int8(v)
+	p.m.Version = version
+
+	// envColors: QMap<int,int>
+	if err := p.readEnvColors(); err != nil {
+		return fmt.Errorf("envColors: %w", err)
+	}
+
+	// areaNames: QMap<int, QString>
+	if err := p.readAreaNames(); err != nil {
+		return fmt.Errorf("areaNames: %w", err)
+	}
+
+	// mCustomEnvColors: QMap<int,QColor>
+	if err := p.readCustomEnvColors(); err != nil {
+		return fmt.Errorf("mCustomEnvColors: %w", err)
+	}
+
+	// mpRoomDbHashToRoomId: QMap<QString,uint>
+	if err := p.readRoomDbHashToRoomId(); err != nil {
+		return fmt.Errorf("mpRoomDbHashToRoomId: %w", err)
+	}
+
+	// mUserData: QMap<QString,QString>
+	if err := p.readUserData(); err != nil {
+		return fmt.Errorf("mUserData: %w", err)
+	}
+
+	// mapSymbolFont: QFont
+	font, err := p.readQFont()
+	if err != nil {
+		return fmt.Errorf("mapSymbolFont: %w", err)
+	}
+	p.m.MapSymbolFont = font
+
+	// mapFontFudgeFactor: double
+	fudge, err := p.r.ReadDouble()
+	if err != nil {
+		return fmt.Errorf("mapFontFudgeFactor: %w", err)
+	}
+	p.m.MapFontFudgeFactor = fudge
+
+	// useOnlyMapFont: bool
+	useOnly, err := p.r.ReadBool()
+	if err != nil {
+		return fmt.Errorf("useOnlyMapFont: %w", err)
+	}
+	p.m.UseOnlyMapFont = useOnly
+
+	// areas: MudletAreas
+	if err := p.readAreas(); err != nil {
+		return fmt.Errorf("areas: %w", err)
+	}
+
+	// mRoomIdHash: QMap<QString,int>
+	if err := p.readRoomIdHash(); err != nil {
+		return fmt.Errorf("mRoomIdHash: %w", err)
+	}
+
+	// labels: MudletLabels (version < 21)
+	if err := p.readLabels(); err != nil {
+		return fmt.Errorf("labels: %w", err)
+	}
+
+	// rooms: MudletRooms (until end of file)
+	if err := p.readRooms(); err != nil {
+		return fmt.Errorf("rooms: %w", err)
+	}
+
 	return nil
 }
 
-// parseRooms parses the MudletRooms section (sequence of id->MudletRoom entries until EOF)
-func parseRooms(qt *BinaryReader, m *Map) error {
-	dirs := []string{"north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down", "in", "out", "north2", "east2", "south2", "west2"}
-	for {
-		// If no more data, we are done
-		if peek, err := qt.Peek(1); err != nil || len(peek) == 0 {
-			break
-		}
-		// Read room id
-		id, err := qt.ReadInt32()
+// --- Map-level field readers ---
+
+func (p *parser) readEnvColors() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		key, err := p.r.ReadInt32()
 		if err != nil {
-			// likely EOF
-			break
+			return err
 		}
-		r := &Room{ID: id}
-		// area (int32) - currently unused in our model
-		_, _ = qt.ReadInt32()
-		// coordinates
-		r.X, _ = qt.ReadInt32()
-		r.Y, _ = qt.ReadInt32()
-		r.Z, _ = qt.ReadInt32()
-		// 12 standard exits
-		exits := make([]Exit, 0, len(dirs))
-		for _, name := range dirs {
-			tgt, _ := qt.ReadInt32()
-			exits = append(exits, Exit{Direction: name, TargetID: tgt})
+		value, err := p.r.ReadInt32()
+		if err != nil {
+			return err
 		}
-		// environment, weight
-		r.Environment, _ = qt.ReadInt32()
-		_, _ = qt.ReadInt32()
-		// name
-		r.Name, _ = qt.ReadQString()
-		// isLocked
-		_, _ = qt.ReadBool()
-		// rawSpecialExits QMultiMap<QUInt, QString>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadUInt32()
-				_, _ = qt.ReadQString()
-			}
-		}
-		// symbol QString (unused)
-		_, _ = qt.ReadQString()
-		// userData QMap<QString,QString>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadQString()
-				_, _ = qt.ReadQString()
-			}
-		}
-		// customLines QMap<QString, QList<QPoint>>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadQString()
-				if l, err := qt.ReadUInt32(); err == nil {
-					for j := uint32(0); j < l; j++ {
-						// QPoint: two doubles
-						_, _ = qt.ReadDouble()
-						_, _ = qt.ReadDouble()
-					}
-				}
-			}
-		}
-		// customLinesArrow QMap<QString, QBool>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadQString()
-				_, _ = qt.ReadBool()
-			}
-		}
-		// customLinesColor QMap<QString, QColor>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadQString()
-				// QColor: 1 byte spec + 5x uint16
-				_, _ = qt.ReadInt8()
-				for c := 0; c < 5; c++ {
-					_, _ = qt.ReadUInt16()
-				}
-			}
-		}
-		// customLinesStyle QMap<QString, QUInt>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadQString()
-				_, _ = qt.ReadUInt32()
-			}
-		}
-		// exitLocks QList<QInt>
-		if l, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < l; i++ {
-				_, _ = qt.ReadInt32()
-			}
-		}
-		// stubs QList<QInt>
-		if l, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < l; i++ {
-				_, _ = qt.ReadInt32()
-			}
-		}
-		// exitWeights QMap<QString, QInt>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadQString()
-				_, _ = qt.ReadInt32()
-			}
-		}
-		// doors QMap<QString, QInt>
-		if n, err := qt.ReadUInt32(); err == nil {
-			for i := uint32(0); i < n; i++ {
-				_, _ = qt.ReadQString()
-				_, _ = qt.ReadInt32()
-			}
-		}
-
-		r.Exits = exits
-		m.Rooms[r.ID] = r
+		p.m.EnvColors[key] = value
 	}
 	return nil
 }
 
-// skipPNG scans forward from the current position to find the PNG IEND chunk marker and consumes up to and including it.
-func skipPNG(qt *BinaryReader) error {
-	needle := []byte{0x49, 0x45, 0x4e, 0x44} // 'IEND'
-	buf := make([]byte, 4)
-	// initialize window
+func (p *parser) readAreaNames() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		id, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		name, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		p.m.Areas[id] = NewMudletArea(id, name)
+	}
+	return nil
+}
+
+func (p *parser) readCustomEnvColors() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		key, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		color, err := p.readQColor()
+		if err != nil {
+			return err
+		}
+		p.m.CustomEnvColors[key] = color
+	}
+	return nil
+}
+
+func (p *parser) readRoomDbHashToRoomId() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		key, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		value, err := p.r.ReadUInt32()
+		if err != nil {
+			return err
+		}
+		p.m.RoomDbHashToRoomId[key] = value
+	}
+	return nil
+}
+
+func (p *parser) readUserData() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		key, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		value, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		p.m.UserData[key] = value
+	}
+	return nil
+}
+
+func (p *parser) readRoomIdHash() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		key, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		value, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		p.m.RoomIdHash[key] = value
+	}
+	return nil
+}
+
+// --- Qt type readers ---
+
+func (p *parser) readQColor() (Color, error) {
+	var c Color
+	spec, err := p.r.ReadInt8()
+	if err != nil {
+		return c, err
+	}
+	c.Spec = spec
+
+	c.Alpha, err = p.r.ReadUInt16()
+	if err != nil {
+		return c, err
+	}
+	c.Red, err = p.r.ReadUInt16()
+	if err != nil {
+		return c, err
+	}
+	c.Green, err = p.r.ReadUInt16()
+	if err != nil {
+		return c, err
+	}
+	c.Blue, err = p.r.ReadUInt16()
+	if err != nil {
+		return c, err
+	}
+	c.Pad, err = p.r.ReadUInt16()
+	if err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
+func (p *parser) readQFont() (Font, error) {
+	var f Font
+	var err error
+
+	f.Family, err = p.r.ReadQString()
+	if err != nil {
+		return f, err
+	}
+	f.StyleHint, err = p.r.ReadQString()
+	if err != nil {
+		return f, err
+	}
+	f.PointSizeF, err = p.r.ReadDouble()
+	if err != nil {
+		return f, err
+	}
+	f.PixelSize, err = p.r.ReadInt32()
+	if err != nil {
+		return f, err
+	}
+	f.StyleStrategy, err = p.r.ReadInt8()
+	if err != nil {
+		return f, err
+	}
+	f.Weight, err = p.r.ReadUInt16()
+	if err != nil {
+		return f, err
+	}
+	style, err := p.r.ReadByte()
+	if err != nil {
+		return f, err
+	}
+	f.Style = style
+
+	underline, err := p.r.ReadInt8()
+	if err != nil {
+		return f, err
+	}
+	f.Underline = underline != 0
+
+	strikeOut, err := p.r.ReadInt8()
+	if err != nil {
+		return f, err
+	}
+	f.StrikeOut = strikeOut != 0
+
+	// Skip fixedPitch (uint16 in this version)
+	_, err = p.r.ReadUInt16()
+	if err != nil {
+		return f, err
+	}
+
+	f.Capitalization, err = p.r.ReadInt8()
+	if err != nil {
+		return f, err
+	}
+	f.LetterSpacing, err = p.r.ReadInt32()
+	if err != nil {
+		return f, err
+	}
+	f.WordSpacing, err = p.r.ReadInt32()
+	if err != nil {
+		return f, err
+	}
+	f.Stretch, err = p.r.ReadInt8()
+	if err != nil {
+		return f, err
+	}
+	f.HintingPreference, err = p.r.ReadInt8()
+	if err != nil {
+		return f, err
+	}
+
+	return f, nil
+}
+
+func (p *parser) readQVector3D() (Vector3D, error) {
+	var v Vector3D
+	var err error
+	v.X, err = p.r.ReadDouble()
+	if err != nil {
+		return v, err
+	}
+	v.Y, err = p.r.ReadDouble()
+	if err != nil {
+		return v, err
+	}
+	v.Z, err = p.r.ReadDouble()
+	if err != nil {
+		return v, err
+	}
+	return v, nil
+}
+
+func (p *parser) readQMapIntInt() (map[int32]int32, error) {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[int32]int32, count)
+	for i := int32(0); i < count; i++ {
+		key, err := p.r.ReadInt32()
+		if err != nil {
+			return nil, err
+		}
+		value, err := p.r.ReadInt32()
+		if err != nil {
+			return nil, err
+		}
+		result[key] = value
+	}
+	return result, nil
+}
+
+// --- Area readers ---
+
+func (p *parser) readAreas() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+
+	for i := int32(0); i < count; i++ {
+		areaID, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+
+		area := p.m.Areas[areaID]
+		if area == nil {
+			area = NewMudletArea(areaID, "")
+			p.m.Areas[areaID] = area
+		}
+
+		if err := p.readAreaData(area); err != nil {
+			return fmt.Errorf("area %d: %w", areaID, err)
+		}
+	}
+
+	return nil
+}
+
+func (p *parser) readAreaData(area *MudletArea) error {
+	var err error
+
+	// rooms: QSet<quint32>
+	roomCount, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.Rooms = make([]uint32, 0, roomCount)
+	for i := int32(0); i < roomCount; i++ {
+		roomID, err := p.r.ReadUInt32()
+		if err != nil {
+			return err
+		}
+		area.Rooms = append(area.Rooms, roomID)
+	}
+
+	// zLevels: QList<int>
+	zLevelCount, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.ZLevels = make([]int32, 0, zLevelCount)
+	for i := int32(0); i < zLevelCount; i++ {
+		z, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		area.ZLevels = append(area.ZLevels, z)
+	}
+
+	// mAreaExits: QMultiMap<int, QPair<int, int>>
+	areaExitsCount, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.AreaExits = make([]AreaExit, 0, areaExitsCount)
+	for i := int32(0); i < areaExitsCount; i++ {
+		roomID, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		destRoomID, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		direction, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		area.AreaExits = append(area.AreaExits, AreaExit{
+			RoomID:     roomID,
+			DestRoomID: destRoomID,
+			Direction:  direction,
+		})
+	}
+
+	// gridMode: bool
+	area.GridMode, err = p.r.ReadBool()
+	if err != nil {
+		return err
+	}
+
+	// bounds: max_x, max_y, max_z, min_x, min_y, min_z
+	area.Bounds.MaxX, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.Bounds.MaxY, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.Bounds.MaxZ, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.Bounds.MinX, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.Bounds.MinY, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.Bounds.MinZ, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+
+	// span: QVector3D
+	area.Span, err = p.readQVector3D()
+	if err != nil {
+		return err
+	}
+
+	// xmaxForZ, ymaxForZ, xminForZ, yminForZ: 4 x QMap<int,int>
+	area.XMaxForZ, err = p.readQMapIntInt()
+	if err != nil {
+		return err
+	}
+	area.YMaxForZ, err = p.readQMapIntInt()
+	if err != nil {
+		return err
+	}
+	area.XMinForZ, err = p.readQMapIntInt()
+	if err != nil {
+		return err
+	}
+	area.YMinForZ, err = p.readQMapIntInt()
+	if err != nil {
+		return err
+	}
+
+	// pos: QVector3D
+	area.Pos, err = p.readQVector3D()
+	if err != nil {
+		return err
+	}
+
+	// isZone: bool
+	area.IsZone, err = p.r.ReadBool()
+	if err != nil {
+		return err
+	}
+
+	// zoneAreaRef: int32
+	area.ZoneAreaRef, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+
+	// mLast2DMapZoom: double (version >= 21 only)
+	if p.m.Version >= 21 {
+		area.Last2DMapZoom, err = p.r.ReadDouble()
+		if err != nil {
+			return err
+		}
+	}
+
+	// mUserData: QMap<QString,QString>
+	userDataCount, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < userDataCount; i++ {
+		key, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		value, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		area.UserData[key] = value
+	}
+
+	// mMapLabels (version >= 21 only)
+	if p.m.Version >= 21 {
+		if err := p.readAreaLabels(area); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *parser) readAreaLabels(area *MudletArea) error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	area.Labels = make([]*MudletLabel, 0, count)
+	for i := int32(0); i < count; i++ {
+		labelID, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		label, err := p.readLabelV21(labelID)
+		if err != nil {
+			return err
+		}
+		area.Labels = append(area.Labels, label)
+	}
+	return nil
+}
+
+// --- Label readers ---
+
+func (p *parser) readLabels() error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+
+	for i := int32(0); i < count; i++ {
+		labelCount, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		areaID, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+
+		labels := make([]*MudletLabel, 0, labelCount)
+		for j := int32(0); j < labelCount; j++ {
+			label, err := p.readLabel()
+			if err != nil {
+				return fmt.Errorf("label %d in area %d: %w", j, areaID, err)
+			}
+			labels = append(labels, label)
+		}
+		p.m.Labels[areaID] = labels
+	}
+
+	return nil
+}
+
+func (p *parser) readLabel() (*MudletLabel, error) {
+	label := &MudletLabel{}
+	var err error
+
+	label.ID, err = p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+
+	// pos: QVector3D
+	label.Pos, err = p.readQVector3D()
+	if err != nil {
+		return nil, err
+	}
+
+	// dummy1, dummy2 (unused in v20)
+	for i := 0; i < 2; i++ {
+		if _, err := p.r.ReadDouble(); err != nil {
+			return nil, err
+		}
+	}
+
+	// size: QSizeF
+	label.Width, err = p.r.ReadDouble()
+	if err != nil {
+		return nil, err
+	}
+	label.Height, err = p.r.ReadDouble()
+	if err != nil {
+		return nil, err
+	}
+
+	// text: QString
+	label.Text, err = p.r.ReadQString()
+	if err != nil {
+		return nil, err
+	}
+
+	// fgColor, bgColor
+	label.FgColor, err = p.readQColor()
+	if err != nil {
+		return nil, err
+	}
+	label.BgColor, err = p.readQColor()
+	if err != nil {
+		return nil, err
+	}
+
+	// QPixmap
+	label.Pixmap, err = p.readQPixmap()
+	if err != nil {
+		return nil, err
+	}
+
+	// noScaling, showOnTop
+	label.NoScaling, err = p.r.ReadBool()
+	if err != nil {
+		return nil, err
+	}
+	label.ShowOnTop, err = p.r.ReadBool()
+	if err != nil {
+		return nil, err
+	}
+
+	return label, nil
+}
+
+func (p *parser) readLabelV21(labelID int32) (*MudletLabel, error) {
+	label := &MudletLabel{ID: labelID}
+	var err error
+
+	// pos: QVector3D
+	label.Pos, err = p.readQVector3D()
+	if err != nil {
+		return nil, err
+	}
+
+	// size: QSizeF
+	label.Width, err = p.r.ReadDouble()
+	if err != nil {
+		return nil, err
+	}
+	label.Height, err = p.r.ReadDouble()
+	if err != nil {
+		return nil, err
+	}
+
+	// text: QString
+	label.Text, err = p.r.ReadQString()
+	if err != nil {
+		return nil, err
+	}
+
+	// fgColor, bgColor
+	label.FgColor, err = p.readQColor()
+	if err != nil {
+		return nil, err
+	}
+	label.BgColor, err = p.readQColor()
+	if err != nil {
+		return nil, err
+	}
+
+	// QPixmap
+	label.Pixmap, err = p.readQPixmap()
+	if err != nil {
+		return nil, err
+	}
+
+	// noScaling, showOnTop
+	label.NoScaling, err = p.r.ReadBool()
+	if err != nil {
+		return nil, err
+	}
+	label.ShowOnTop, err = p.r.ReadBool()
+	if err != nil {
+		return nil, err
+	}
+
+	return label, nil
+}
+
+func (p *parser) readQPixmap() ([]byte, error) {
+	// QPixmap marker
+	_, err := p.r.ReadUInt32()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for PNG signature
+	sig, err := p.r.Peek(4)
+	if err != nil || len(sig) < 4 {
+		return nil, nil
+	}
+
+	if uint32(sig[0])<<24|uint32(sig[1])<<16|uint32(sig[2])<<8|uint32(sig[3]) != 0x89504e47 {
+		return nil, nil
+	}
+
+	// Read PNG data until IEND
+	if err := p.skipPNG(); err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func (p *parser) skipPNG() error {
+	needle := []byte{0x49, 0x45, 0x4e, 0x44} // 'I','E','N','D'
 	for {
-		peek, err := qt.Peek(4)
+		peek, err := p.r.Peek(4)
 		if err != nil || len(peek) < 4 {
 			return err
 		}
-		copy(buf, peek)
-		if buf[0] == needle[0] && buf[1] == needle[1] && buf[2] == needle[2] && buf[3] == needle[3] {
-			// consume 'IEND' + 4-byte CRC to land after PNG
-			if err := qt.Skip(8); err != nil {
-				return err
-			}
-			return nil
+		if peek[0] == needle[0] && peek[1] == needle[1] && peek[2] == needle[2] && peek[3] == needle[3] {
+			// Skip IEND + 4-byte CRC
+			return p.r.Skip(8)
 		}
-		// advance by one byte and continue
-		if _, err := qt.ReadByte(); err != nil {
+		if _, err := p.r.ReadByte(); err != nil {
 			return err
 		}
 	}
 }
 
-// skipToRoomsHeuristic advances the reader until it finds a pair of int32 values where the second (area) exists in areas map.
-// This is a best-effort fallback to jump over labels when label parsing is problematic.
-func skipToRoomsHeuristic(qt *BinaryReader, areas map[int32]*Area) error {
-	// Build a fast lookup of area ids
-	valid := make(map[int32]struct{}, len(areas))
-	for id := range areas {
-		valid[id] = struct{}{}
-	}
-	// Sliding window over bytes, checking 8-byte sequences as two int32
+// --- Room readers ---
+
+func (p *parser) readRooms() error {
 	for {
-		peek, err := qt.Peek(8)
-		if err != nil || len(peek) < 8 {
-			return fmt.Errorf("EOF before rooms")
+		peek, err := p.r.Peek(4)
+		if err != nil || len(peek) < 4 {
+			break
 		}
-		id := int32(uint32(peek[0])<<24 | uint32(peek[1])<<16 | uint32(peek[2])<<8 | uint32(peek[3]))
-		area := int32(uint32(peek[4])<<24 | uint32(peek[5])<<16 | uint32(peek[6])<<8 | uint32(peek[7]))
-		if id > 0 {
-			if _, ok := valid[area]; ok {
-				// Found a plausible start of a room entry. Do not consume bytes; let parseRooms proceed from here.
-				return nil
+
+		roomID, err := p.r.ReadInt32()
+		if err != nil {
+			break
+		}
+
+		room, err := p.readRoom(roomID)
+		if err != nil {
+			return fmt.Errorf("room %d: %w", roomID, err)
+		}
+
+		p.m.Rooms[roomID] = room
+	}
+
+	return nil
+}
+
+func (p *parser) readRoom(roomID int32) (*MudletRoom, error) {
+	room := NewMudletRoom(roomID)
+	var err error
+
+	room.Area, err = p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+
+	room.X, err = p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+	room.Y, err = p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+	room.Z, err = p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+
+	// 12 standard exits
+	for i := 0; i < 12; i++ {
+		room.Exits[i], err = p.r.ReadInt32()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	room.Environment, err = p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+
+	room.Weight, err = p.r.ReadInt32()
+	if err != nil {
+		return nil, err
+	}
+
+	room.Name, err = p.r.ReadQString()
+	if err != nil {
+		return nil, err
+	}
+
+	room.IsLocked, err = p.r.ReadBool()
+	if err != nil {
+		return nil, err
+	}
+
+	// Special exits (version dependent)
+	if err := p.readSpecialExits(room); err != nil {
+		return nil, err
+	}
+
+	// Symbol
+	if err := p.readRoomSymbol(room); err != nil {
+		return nil, err
+	}
+
+	// Symbol color (v21+)
+	if p.m.Version >= 21 {
+		color, err := p.readQColor()
+		if err != nil {
+			return nil, err
+		}
+		room.SymbolColor = &color
+	}
+
+	// User data (v10+)
+	if p.m.Version >= 10 {
+		if err := p.readRoomUserData(room); err != nil {
+			return nil, err
+		}
+	}
+
+	// Custom lines (v11+)
+	if p.m.Version >= 11 {
+		if err := p.readRoomCustomLines(room); err != nil {
+			return nil, err
+		}
+	}
+
+	// Exit stubs (v13+)
+	if p.m.Version >= 13 {
+		if err := p.readExitStubs(room); err != nil {
+			return nil, err
+		}
+	}
+
+	// Exit weights and doors (v16+)
+	if p.m.Version >= 16 {
+		if err := p.readExitWeightsAndDoors(room); err != nil {
+			return nil, err
+		}
+	}
+
+	return room, nil
+}
+
+func (p *parser) readSpecialExits(room *MudletRoom) error {
+	if p.m.Version >= 21 {
+		// v21+: QMultiMap<QString, int>
+		count, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		for i := int32(0); i < count; i++ {
+			cmd, err := p.r.ReadQString()
+			if err != nil {
+				return err
+			}
+			destRoom, err := p.r.ReadInt32()
+			if err != nil {
+				return err
+			}
+			room.SpecialExits[cmd] = destRoom
+		}
+	} else if p.m.Version >= 6 {
+		// v6-20: QMultiMap<int, QString>
+		count, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		for i := int32(0); i < count; i++ {
+			destRoom, err := p.r.ReadInt32()
+			if err != nil {
+				return err
+			}
+			cmd, err := p.r.ReadQString()
+			if err != nil {
+				return err
+			}
+			// Strip lock prefix ("0" or "1")
+			if len(cmd) > 1 {
+				cmd = cmd[1:]
+			}
+			room.SpecialExits[cmd] = destRoom
+		}
+	}
+	return nil
+}
+
+func (p *parser) readRoomSymbol(room *MudletRoom) error {
+	if p.m.Version >= 19 {
+		var err error
+		room.Symbol, err = p.r.ReadQString()
+		return err
+	} else if p.m.Version >= 9 {
+		_, err := p.r.ReadByte()
+		return err
+	}
+	return nil
+}
+
+func (p *parser) readRoomUserData(room *MudletRoom) error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		key, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		value, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		room.UserData[key] = value
+	}
+	return nil
+}
+
+func (p *parser) readRoomCustomLines(room *MudletRoom) error {
+	if p.m.Version >= 20 {
+		return p.readRoomCustomLinesV20(room)
+	}
+	return p.readRoomCustomLinesOld(room)
+}
+
+func (p *parser) readRoomCustomLinesV20(room *MudletRoom) error {
+	// customLines: QMap<QString, QList<QPointF>>
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		pointCount, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		points := make([]Point2D, 0, pointCount)
+		for j := int32(0); j < pointCount; j++ {
+			x, err := p.r.ReadDouble()
+			if err != nil {
+				return err
+			}
+			y, err := p.r.ReadDouble()
+			if err != nil {
+				return err
+			}
+			points = append(points, Point2D{X: x, Y: y})
+		}
+		room.CustomLines[dir] = points
+	}
+
+	// customLinesArrow: QMap<QString, bool>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		arrow, err := p.r.ReadBool()
+		if err != nil {
+			return err
+		}
+		room.CustomLinesArrow[dir] = arrow
+	}
+
+	// customLinesColor: QMap<QString, QColor>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		color, err := p.readQColor()
+		if err != nil {
+			return err
+		}
+		room.CustomLinesColor[dir] = color
+	}
+
+	// customLinesStyle: QMap<QString, int>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		style, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		room.CustomLinesStyle[dir] = style
+	}
+
+	// Special exit locks (v21+)
+	if p.m.Version >= 21 {
+		count, err = p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		room.SpecialExitLocks = make([]string, 0, count)
+		for i := int32(0); i < count; i++ {
+			lock, err := p.r.ReadQString()
+			if err != nil {
+				return err
+			}
+			room.SpecialExitLocks = append(room.SpecialExitLocks, lock)
+		}
+	}
+
+	// exitLocks: QList<int>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	room.ExitLocks = make([]int32, 0, count)
+	for i := int32(0); i < count; i++ {
+		lock, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		room.ExitLocks = append(room.ExitLocks, lock)
+	}
+
+	return nil
+}
+
+func (p *parser) readRoomCustomLinesOld(room *MudletRoom) error {
+	// customLines: QMap<QString, QList<QPointF>>
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		pointCount, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		points := make([]Point2D, 0, pointCount)
+		for j := int32(0); j < pointCount; j++ {
+			x, err := p.r.ReadDouble()
+			if err != nil {
+				return err
+			}
+			y, err := p.r.ReadDouble()
+			if err != nil {
+				return err
+			}
+			points = append(points, Point2D{X: x, Y: y})
+		}
+		room.CustomLines[dir] = points
+	}
+
+	// customLinesArrow: QMap<QString, bool>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		arrow, err := p.r.ReadBool()
+		if err != nil {
+			return err
+		}
+		room.CustomLinesArrow[dir] = arrow
+	}
+
+	// customLinesColor: QMap<QString, QList<int>> (3 ints for RGB)
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		rgbCount, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		var r, g, b int32
+		for j := int32(0); j < rgbCount && j < 3; j++ {
+			val, err := p.r.ReadInt32()
+			if err != nil {
+				return err
+			}
+			switch j {
+			case 0:
+				r = val
+			case 1:
+				g = val
+			case 2:
+				b = val
 			}
 		}
-		// advance by one byte
-		if _, err := qt.ReadByte(); err != nil {
+		// Skip extra values if any
+		for j := int32(3); j < rgbCount; j++ {
+			if _, err := p.r.ReadInt32(); err != nil {
+				return err
+			}
+		}
+		room.CustomLinesColor[dir] = Color{
+			Red:   uint16(r) << 8,
+			Green: uint16(g) << 8,
+			Blue:  uint16(b) << 8,
+			Alpha: 0xFFFF,
+		}
+	}
+
+	// customLinesStyle: QMap<QString, QString>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		_, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		// In old format, style is stored as QString
+		_, err = p.r.ReadQString()
+		if err != nil {
 			return err
 		}
 	}
+
+	// exitLocks: QList<int>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	room.ExitLocks = make([]int32, 0, count)
+	for i := int32(0); i < count; i++ {
+		lock, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		room.ExitLocks = append(room.ExitLocks, lock)
+	}
+
+	return nil
+}
+
+func (p *parser) readExitStubs(room *MudletRoom) error {
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	room.ExitStubs = make([]int32, 0, count)
+	for i := int32(0); i < count; i++ {
+		stub, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		room.ExitStubs = append(room.ExitStubs, stub)
+	}
+	return nil
+}
+
+func (p *parser) readExitWeightsAndDoors(room *MudletRoom) error {
+	// exitWeights: QMap<QString, int>
+	count, err := p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		weight, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		room.ExitWeights[dir] = weight
+	}
+
+	// doors: QMap<QString, int>
+	count, err = p.r.ReadInt32()
+	if err != nil {
+		return err
+	}
+	for i := int32(0); i < count; i++ {
+		dir, err := p.r.ReadQString()
+		if err != nil {
+			return err
+		}
+		doorType, err := p.r.ReadInt32()
+		if err != nil {
+			return err
+		}
+		room.Doors[dir] = doorType
+	}
+
+	return nil
 }
