@@ -39,6 +39,10 @@ type MapStats struct {
 
 // BoundingBox represents the minimum and maximum coordinates of the map
 type BoundingBox struct {
-	MinX, MinY, MinZ int32 `json:"minX,minY,minZ"`
-	MaxX, MaxY, MaxZ int32 `json:"maxX,maxY,maxZ"`
+	MinX int32 `json:"minX"`
+	MinY int32 `json:"minY"`
+	MinZ int32 `json:"minZ"`
+	MaxX int32 `json:"maxX"`
+	MaxY int32 `json:"maxY"`
+	MaxZ int32 `json:"maxZ"`
 }
