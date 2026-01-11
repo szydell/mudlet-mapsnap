@@ -7,9 +7,14 @@ import (
 	"sort"
 )
 
-// ValidateMap performs a minimal validation of the parsed map structure.
-// This is a stub implementation intended to unblock compilation and basic CLI flows.
-// It checks for a valid version and that exit targets (if not NoExit) refer to existing rooms.
+// ValidateMap performs validation of the parsed map structure.
+//
+// It checks:
+//   - Map is not nil
+//   - Map version is positive (valid Mudlet format)
+//   - All room exits point to existing rooms
+//
+// Returns a slice of [ValidationError] describing any issues found.
 func ValidateMap(m *Map) []ValidationError {
 	var errs []ValidationError
 	if m == nil {
@@ -37,7 +42,15 @@ func ValidateMap(m *Map) []ValidationError {
 	return errs
 }
 
-// GetMapStats returns basic statistics computed from the map structure.
+// GetMapStats computes and returns statistics about the map.
+//
+// Statistics include:
+//   - Total room and area counts
+//   - Number of unique environments
+//   - Bounding box (min/max coordinates)
+//   - Sorted list of Z-levels used
+//
+// Returns an empty [MapStats] if the map is nil.
 func GetMapStats(m *Map) MapStats {
 	stats := MapStats{}
 	if m == nil {
@@ -88,7 +101,10 @@ func GetMapStats(m *Map) MapStats {
 	return stats
 }
 
-// ExportToJSON writes the map structure to a JSON file with indentation.
+// ExportToJSON writes the map structure to a JSON file.
+// The output is formatted with 2-space indentation for readability.
+//
+// Returns an error if the map is nil or if file operations fail.
 func ExportToJSON(m *Map, filename string) error {
 	if m == nil {
 		return fmt.Errorf("nil map provided")

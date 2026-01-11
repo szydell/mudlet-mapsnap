@@ -1,8 +1,14 @@
 package mapparser
 
-// MudletMap represents the complete structure of a Mudlet map file (version 6-21+)
-// This is the primary data structure used throughout the application.
+// MudletMap represents the complete structure of a Mudlet map file.
+//
+// This is the primary data structure returned by [ParseMapFile] and [ParseMap].
+// It supports Mudlet map format versions 6-21+, though version 20 is the
+// most commonly used format.
+//
+// Use [NewMudletMap] to create an empty map structure.
 type MudletMap struct {
+	// Version is the Mudlet map format version (typically 6-21).
 	Version int32 `json:"version"`
 
 	// Environment colors: maps environment ID to color value
@@ -36,7 +42,10 @@ type MudletMap struct {
 	Labels map[int32][]*MudletLabel `json:"labels,omitempty"`
 }
 
-// MudletArea represents a map area containing rooms
+// MudletArea represents a map area (zone) containing rooms.
+//
+// Areas are logical groupings of rooms, typically representing different
+// regions or zones in a MUD. Use [NewMudletArea] to create a new area.
 type MudletArea struct {
 	ID   int32  `json:"id"`
 	Name string `json:"name"`
@@ -90,7 +99,11 @@ type AreaExit struct {
 	Direction  int32 `json:"direction"`  // Exit direction
 }
 
-// MudletRoom represents a single room in the map
+// MudletRoom represents a single room in the map.
+//
+// Rooms are the fundamental unit of a MUD map. Each room has a position
+// (X, Y, Z), up to 12 standard exits, optional special exits, and various
+// metadata. Use [NewMudletRoom] to create a new room.
 type MudletRoom struct {
 	ID   int32 `json:"id"`
 	Area int32 `json:"area"`
@@ -154,7 +167,10 @@ type MudletRoom struct {
 	Doors map[string]int32 `json:"doors,omitempty"`
 }
 
-// MudletLabel represents a text or image label on the map
+// MudletLabel represents a text or image label placed on the map.
+//
+// Labels can contain text, images (PNG pixmaps), or both. They are used
+// to annotate areas with additional information visible on the map.
 type MudletLabel struct {
 	ID int32 `json:"id"`
 
@@ -180,22 +196,25 @@ type MudletLabel struct {
 	ShowOnTop bool `json:"showOnTop"`
 }
 
-// Color represents an RGBA color (Qt QColor)
+// Color represents an RGBA color stored in Qt's QColor format.
+//
+// Qt stores color components as 16-bit values, where the high byte contains
+// the actual 8-bit color value. Use [ToRGBA] to convert to standard 8-bit values.
 type Color struct {
-	Spec  int8   `json:"spec"` // Color specification type
+	Spec  int8   `json:"spec"` // Color specification type (RGB, HSV, etc.)
 	Red   uint16 `json:"r"`
 	Green uint16 `json:"g"`
 	Blue  uint16 `json:"b"`
 	Alpha uint16 `json:"a"`
-	Pad   uint16 `json:"-"` // Padding field in QColor
+	Pad   uint16 `json:"-"` // Padding field in Qt's QColor structure
 }
 
-// ToRGBA returns the color as 8-bit RGBA values
+// ToRGBA converts the Qt color to standard 8-bit RGBA values.
 func (c Color) ToRGBA() (r, g, b, a uint8) {
 	return uint8(c.Red >> 8), uint8(c.Green >> 8), uint8(c.Blue >> 8), uint8(c.Alpha >> 8)
 }
 
-// Font represents Qt QFont structure
+// Font represents a Qt QFont structure as serialized in QDataStream.
 type Font struct {
 	Family            string  `json:"family"`
 	StyleHint         string  `json:"styleHint,omitempty"`
@@ -214,20 +233,22 @@ type Font struct {
 	HintingPreference int8    `json:"hintingPreference"`
 }
 
-// Vector3D represents a 3D vector (Qt QVector3D stored as 3 doubles)
+// Vector3D represents a 3D vector, stored as three float64 values.
+// In Qt, this corresponds to QVector3D serialized as 3 doubles.
 type Vector3D struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
 	Z float64 `json:"z"`
 }
 
-// Point2D represents a 2D point (Qt QPointF)
+// Point2D represents a 2D point, stored as two float64 values.
+// In Qt, this corresponds to QPointF.
 type Point2D struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
 }
 
-// BoundingBox3D represents 3D bounding box
+// BoundingBox3D represents a 3D axis-aligned bounding box.
 type BoundingBox3D struct {
 	MinX int32 `json:"minX"`
 	MinY int32 `json:"minY"`
@@ -237,46 +258,47 @@ type BoundingBox3D struct {
 	MaxZ int32 `json:"maxZ"`
 }
 
-// ExitDirection constants for standard exits
+// Exit direction constants for standard exits.
+// These correspond to indices in [MudletRoom.Exits].
 const (
-	ExitNorth     = 0
-	ExitNortheast = 1
-	ExitEast      = 2
-	ExitSoutheast = 3
-	ExitSouth     = 4
-	ExitSouthwest = 5
-	ExitWest      = 6
-	ExitNorthwest = 7
-	ExitUp        = 8
-	ExitDown      = 9
-	ExitIn        = 10
-	ExitOut       = 11
+	ExitNorth     = 0  // North exit
+	ExitNortheast = 1  // Northeast exit
+	ExitEast      = 2  // East exit
+	ExitSoutheast = 3  // Southeast exit
+	ExitSouth     = 4  // South exit
+	ExitSouthwest = 5  // Southwest exit
+	ExitWest      = 6  // West exit
+	ExitNorthwest = 7  // Northwest exit
+	ExitUp        = 8  // Up exit
+	ExitDown      = 9  // Down exit
+	ExitIn        = 10 // In exit
+	ExitOut       = 11 // Out exit
 )
 
-// ExitDirectionNames maps exit index to direction name
+// ExitDirectionNames maps exit direction index to full direction name.
 var ExitDirectionNames = [12]string{
 	"north", "northeast", "east", "southeast",
 	"south", "southwest", "west", "northwest",
 	"up", "down", "in", "out",
 }
 
-// ExitDirectionShortNames maps exit index to short direction name
+// ExitDirectionShortNames maps exit direction index to abbreviated name.
 var ExitDirectionShortNames = [12]string{
 	"n", "ne", "e", "se", "s", "sw", "w", "nw", "up", "down", "in", "out",
 }
 
-// NoExit is the value indicating no exit in that direction
+// NoExit indicates that no exit exists in a given direction.
 const NoExit int32 = -1
 
-// DoorType constants
+// Door type constants for the [MudletRoom.Doors] map.
 const (
-	DoorNone   = 0
-	DoorOpen   = 1
-	DoorClosed = 2
-	DoorLocked = 3
+	DoorNone   = 0 // No door
+	DoorOpen   = 1 // Open door
+	DoorClosed = 2 // Closed door
+	DoorLocked = 3 // Locked door
 )
 
-// NewMudletMap creates a new empty MudletMap
+// NewMudletMap creates a new empty MudletMap with initialized maps.
 func NewMudletMap() *MudletMap {
 	return &MudletMap{
 		EnvColors:          make(map[int32]int32),
@@ -290,7 +312,7 @@ func NewMudletMap() *MudletMap {
 	}
 }
 
-// NewMudletArea creates a new empty MudletArea
+// NewMudletArea creates a new empty MudletArea with the given ID and name.
 func NewMudletArea(id int32, name string) *MudletArea {
 	return &MudletArea{
 		ID:       id,
@@ -306,7 +328,8 @@ func NewMudletArea(id int32, name string) *MudletArea {
 	}
 }
 
-// NewMudletRoom creates a new MudletRoom with default values
+// NewMudletRoom creates a new MudletRoom with the given ID and default values.
+// All exits are initialized to [NoExit], and weight is set to 1.
 func NewMudletRoom(id int32) *MudletRoom {
 	r := &MudletRoom{
 		ID:               id,
@@ -327,7 +350,8 @@ func NewMudletRoom(id int32) *MudletRoom {
 	return r
 }
 
-// GetExit returns the destination room ID for a given direction, or NoExit
+// GetExit returns the destination room ID for the given direction.
+// Returns [NoExit] if the direction is invalid or no exit exists.
 func (r *MudletRoom) GetExit(direction int) int32 {
 	if direction < 0 || direction >= 12 {
 		return NoExit
@@ -335,12 +359,12 @@ func (r *MudletRoom) GetExit(direction int) int32 {
 	return r.Exits[direction]
 }
 
-// HasExit checks if the room has an exit in the given direction
+// HasExit reports whether the room has an exit in the given direction.
 func (r *MudletRoom) HasExit(direction int) bool {
 	return r.GetExit(direction) != NoExit
 }
 
-// ActiveExits returns a slice of directions that have exits
+// ActiveExits returns a slice of direction indices that have exits.
 func (r *MudletRoom) ActiveExits() []int {
 	var result []int
 	for i, exit := range r.Exits {
@@ -351,27 +375,27 @@ func (r *MudletRoom) ActiveExits() []int {
 	return result
 }
 
-// GetRoom returns a room by ID, or nil if not found
+// GetRoom returns the room with the given ID, or nil if not found.
 func (m *MudletMap) GetRoom(id int32) *MudletRoom {
 	return m.Rooms[id]
 }
 
-// GetArea returns an area by ID, or nil if not found
+// GetArea returns the area with the given ID, or nil if not found.
 func (m *MudletMap) GetArea(id int32) *MudletArea {
 	return m.Areas[id]
 }
 
-// RoomCount returns the total number of rooms
+// RoomCount returns the total number of rooms in the map.
 func (m *MudletMap) RoomCount() int {
 	return len(m.Rooms)
 }
 
-// AreaCount returns the total number of areas
+// AreaCount returns the total number of areas in the map.
 func (m *MudletMap) AreaCount() int {
 	return len(m.Areas)
 }
 
-// GetRoomsInArea returns all rooms belonging to an area
+// GetRoomsInArea returns all rooms belonging to the specified area.
 func (m *MudletMap) GetRoomsInArea(areaID int32) []*MudletRoom {
 	var rooms []*MudletRoom
 	for _, room := range m.Rooms {
@@ -382,7 +406,9 @@ func (m *MudletMap) GetRoomsInArea(areaID int32) []*MudletRoom {
 	return rooms
 }
 
-// GetLabelsForArea returns labels for a specific area
+// GetLabelsForArea returns labels for the specified area.
+// In format version 21+, labels are stored within the area; in earlier versions,
+// they are stored at the map level. This method handles both cases.
 func (m *MudletMap) GetLabelsForArea(areaID int32) []*MudletLabel {
 	// First check if labels are stored in the area itself (version 21+)
 	if area, ok := m.Areas[areaID]; ok && len(area.Labels) > 0 {

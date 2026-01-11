@@ -13,13 +13,16 @@ import (
 	"github.com/szydell/mudlet-mapsnap/pkg/mapparser"
 )
 
-// Renderer handles map rendering operations
+// Renderer handles map visualization and image generation.
+// Create a new Renderer using [NewRenderer], set the map data with [SetMap],
+// then generate images using [RenderFragment].
 type Renderer struct {
 	config  *Config
 	mapData *mapparser.MudletMap
 }
 
-// NewRenderer creates a new renderer with the given configuration
+// NewRenderer creates a new Renderer with the given configuration.
+// If cfg is nil, [DefaultConfig] is used.
 func NewRenderer(cfg *Config) *Renderer {
 	if cfg == nil {
 		cfg = DefaultConfig()
@@ -29,22 +32,39 @@ func NewRenderer(cfg *Config) *Renderer {
 	}
 }
 
-// SetMap sets the map data to render
+// SetMap sets the map data to be rendered.
+// This must be called before [RenderFragment].
 func (r *Renderer) SetMap(m *mapparser.MudletMap) {
 	r.mapData = m
 }
 
-// RenderResult contains the rendered image and metadata
+// RenderResult contains the rendered image and associated metadata.
 type RenderResult struct {
-	Image      *image.RGBA
+	// Image is the rendered RGBA image.
+	Image *image.RGBA
+	// CenterRoom is the room ID that was used as the center point.
 	CenterRoom int32
-	AreaID     int32
-	AreaName   string
-	ZLevel     int32
+	// AreaID is the ID of the area containing the center room.
+	AreaID int32
+	// AreaName is the name of the area.
+	AreaName string
+	// ZLevel is the Z-coordinate of the rendered level.
+	ZLevel int32
+	// RoomsDrawn is the number of rooms actually rendered.
 	RoomsDrawn int
 }
 
-// RenderFragment renders a map fragment centered on the given room
+// RenderFragment renders a map fragment centered on the specified room.
+//
+// The rendering includes:
+//   - All rooms within the visible area (based on image dimensions and room spacing)
+//   - Exit lines connecting rooms
+//   - Room symbols and up/down indicators
+//   - Labels (both background and foreground)
+//   - Player position highlight at the center
+//
+// Only rooms from the same area as the center room are rendered.
+// Returns an error if no map data is loaded or if the room is not found.
 func (r *Renderer) RenderFragment(roomID int32) (*RenderResult, error) {
 	if r.mapData == nil {
 		return nil, fmt.Errorf("no map data loaded")

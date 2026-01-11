@@ -9,18 +9,22 @@ import (
 	"unicode/utf16"
 )
 
-// BinaryReader provides helper methods for reading binary data
+// BinaryReader provides methods for reading binary data in Qt's QDataStream format.
+// It wraps a bufio.Reader for efficient buffered reading and tracks the approximate
+// byte position for debugging purposes.
 type BinaryReader struct {
 	reader *bufio.Reader
-	pos    int // approximate position for debugging; not strictly maintained
+	pos    int // approximate byte position (for debugging)
 }
 
-// Position returns current approximate byte offset from the start
+// Position returns the approximate byte offset from the start of the stream.
+// This value is tracked for debugging and may not be exact after errors.
 func (br *BinaryReader) Position() int {
 	return br.pos
 }
 
-// NewBinaryReader creates a new BinaryReader
+// NewBinaryReader creates a new BinaryReader wrapping the given io.Reader.
+// The reader is automatically wrapped in a bufio.Reader for efficient buffered I/O.
 func NewBinaryReader(reader io.Reader) *BinaryReader {
 	return &BinaryReader{
 		reader: bufio.NewReader(reader),
@@ -78,9 +82,13 @@ func (br *BinaryReader) ReadString() (string, error) {
 	return string(data), nil
 }
 
-// ReadQString reads a Qt QString from QDataStream (Qt 5.x semantics)
-// Format: qint32 byteLength; -1 means empty string; otherwise byteLength is number of BYTES of UTF-16BE data
-// Then follows `byteLength` bytes (must be divisible by 2) representing 16-bit QChars (UTF-16BE)
+// ReadQString reads a Qt QString from QDataStream using Qt 5.x serialization format.
+//
+// Format:
+//   - uint32 byteLength: number of bytes of UTF-16BE data (0xFFFFFFFF for null/empty string)
+//   - []byte data: UTF-16BE encoded characters (byteLength bytes, must be even)
+//
+// Returns the decoded UTF-8 string, or an empty string for null QString values.
 func (br *BinaryReader) ReadQString() (string, error) {
 	// In Qt5 QDataStream, QString is serialized as quint32 byte length (or 0xFFFFFFFF for null),
 	// followed by that many bytes of UTF-16BE data.

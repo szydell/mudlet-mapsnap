@@ -7,7 +7,18 @@ import (
 	"os"
 )
 
-// ParseMapFile parses a Mudlet map file and returns a MudletMap structure.
+// ParseMapFile parses a Mudlet map file and returns a [MudletMap] structure.
+//
+// This is the primary entry point for parsing map files. It opens the file,
+// parses its contents, and properly closes the file handle.
+//
+// Example:
+//
+//	m, err := mapparser.ParseMapFile("world.map")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Printf("Loaded %d rooms\n", m.RoomCount())
 func ParseMapFile(filename string) (m *MudletMap, err error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -27,7 +38,10 @@ func ParseMapFile(filename string) (m *MudletMap, err error) {
 	return ParseMap(file)
 }
 
-// ParseMap parses a Mudlet map from an io.Reader.
+// ParseMap parses a Mudlet map from an [io.Reader].
+//
+// Use this function when you have an already-open reader, such as an embedded
+// file or network stream. For parsing files, prefer [ParseMapFile].
 func ParseMap(reader io.Reader) (*MudletMap, error) {
 	p := &parser{
 		r: NewBinaryReader(reader),
@@ -41,13 +55,13 @@ func ParseMap(reader io.Reader) (*MudletMap, error) {
 	return p.m, nil
 }
 
-// parser holds state for map parsing operations
+// parser holds internal state for map parsing operations.
 type parser struct {
 	r *BinaryReader
 	m *MudletMap
 }
 
-// parse walks through the entire map file structure
+// parse processes the entire map file structure.
 func (p *parser) parse() error {
 	// version (qint32)
 	version, err := p.r.ReadInt32()

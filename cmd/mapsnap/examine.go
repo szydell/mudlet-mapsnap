@@ -9,8 +9,10 @@ import (
 	"github.com/szydell/mudlet-mapsnap/pkg/mapparser"
 )
 
-// ExamineFile examines a binary map file and displays its Qt/MudletMap structure.
-// With debug=false, shows compact summary. With debug=true, shows detailed values.
+// ExamineFile parses and displays the structure of a Mudlet map file.
+//
+// When debug is false, it shows a compact summary of each section.
+// When debug is true, it includes detailed values, offsets, and sample data.
 func ExamineFile(filename string, debug bool) error {
 	info, err := os.Stat(filename)
 	if err != nil {

@@ -12,21 +12,25 @@ import (
 	"github.com/HugoSmits86/nativewebp"
 )
 
-// OutputFormat represents supported output formats
+// OutputFormat represents the supported image output formats.
 type OutputFormat int
 
 const (
+	// FormatWEBP outputs lossless WEBP images (default).
 	FormatWEBP OutputFormat = iota
+	// FormatPNG outputs PNG images with best compression.
 	FormatPNG
 )
 
-// OutputOptions configures the output encoding
+// OutputOptions configures the image encoding behavior.
 type OutputOptions struct {
-	Format  OutputFormat
-	Quality float32 // For WEBP: ignored (nativewebp only supports lossless)
+	// Format specifies the output image format.
+	Format OutputFormat
+	// Quality is reserved for future lossy WEBP support (currently unused).
+	Quality float32
 }
 
-// DefaultOutputOptions returns sensible output defaults
+// DefaultOutputOptions returns default output options (lossless WEBP).
 func DefaultOutputOptions() *OutputOptions {
 	return &OutputOptions{
 		Format:  FormatWEBP,
@@ -34,7 +38,13 @@ func DefaultOutputOptions() *OutputOptions {
 	}
 }
 
-// SaveImage saves the rendered image to a file
+// SaveImage saves the rendered image to a file at the specified path.
+//
+// The output format is auto-detected from the file extension:
+//   - .webp: Lossless WEBP format
+//   - .png: PNG format with best compression
+//
+// Pass nil for opts to use [DefaultOutputOptions].
 func SaveImage(img *image.RGBA, path string, opts *OutputOptions) error {
 	if opts == nil {
 		opts = DefaultOutputOptions()
@@ -58,7 +68,8 @@ func SaveImage(img *image.RGBA, path string, opts *OutputOptions) error {
 	return WriteImage(img, f, opts)
 }
 
-// WriteImage writes the rendered image to a writer
+// WriteImage writes the rendered image to the given io.Writer.
+// Pass nil for opts to use [DefaultOutputOptions].
 func WriteImage(img *image.RGBA, w io.Writer, opts *OutputOptions) error {
 	if opts == nil {
 		opts = DefaultOutputOptions()
@@ -87,7 +98,8 @@ func encodePNG(img *image.RGBA, w io.Writer) error {
 	return encoder.Encode(w, img)
 }
 
-// FormatFromPath returns the output format based on file extension
+// FormatFromPath determines the output format from a file path's extension.
+// Returns [FormatPNG] for .png files, [FormatWEBP] for all others.
 func FormatFromPath(path string) OutputFormat {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
