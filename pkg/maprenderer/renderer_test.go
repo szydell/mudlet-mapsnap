@@ -162,9 +162,9 @@ func TestRenderFragmentRoomNotFound(t *testing.T) {
 
 func TestRenderFragmentBasic(t *testing.T) {
 	r := NewRenderer(&Config{
-		Width:            200,
-		Height:           200,
-		Radius:           5,
+		Width:  200,
+		Height: 200,
+
 		RoomSize:         10,
 		RoomSpacing:      15,
 		DefaultEnvColors: defaultEnvironmentColors(),
@@ -244,9 +244,9 @@ func TestOutputFormatFromPath(t *testing.T) {
 
 func TestWriteImageWEBP(t *testing.T) {
 	r := NewRenderer(&Config{
-		Width:            100,
-		Height:           100,
-		Radius:           2,
+		Width:  100,
+		Height: 100,
+
 		RoomSize:         10,
 		RoomSpacing:      15,
 		DefaultEnvColors: defaultEnvironmentColors(),
@@ -287,9 +287,9 @@ func TestWriteImageWEBP(t *testing.T) {
 
 func TestWriteImagePNG(t *testing.T) {
 	r := NewRenderer(&Config{
-		Width:            100,
-		Height:           100,
-		Radius:           2,
+		Width:  100,
+		Height: 100,
+
 		RoomSize:         10,
 		RoomSpacing:      15,
 		DefaultEnvColors: defaultEnvironmentColors(),
@@ -373,8 +373,8 @@ func TestCollectRoomsInArea(t *testing.T) {
 	}
 	r.SetMap(m)
 
-	// Collect rooms within radius 2 of center (5,5), areaID 1
-	rooms := r.collectRoomsInArea(5, 5, 0, 2, 1)
+	// Collect rooms within rangeX=2, rangeY=2 of center (5,5), areaID 1
+	rooms := r.collectRoomsInArea(5, 5, 0, 2, 2, 1)
 
 	// Should be 5x5 = 25 rooms (from 3,3 to 7,7)
 	if len(rooms) != 25 {
@@ -382,7 +382,7 @@ func TestCollectRoomsInArea(t *testing.T) {
 	}
 
 	// Test area filtering - rooms in area 2 should not be collected
-	roomsWrongArea := r.collectRoomsInArea(5, 5, 0, 2, 2)
+	roomsWrongArea := r.collectRoomsInArea(5, 5, 0, 2, 2, 2)
 	if len(roomsWrongArea) != 0 {
 		t.Errorf("collectRoomsInArea with wrong area returned %d rooms, expected 0", len(roomsWrongArea))
 	}

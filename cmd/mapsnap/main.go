@@ -31,7 +31,6 @@ func main() {
 	// Rendering options
 	imgWidth := flag.Int("width", 800, "Output image width")
 	imgHeight := flag.Int("height", 600, "Output image height")
-	radius := flag.Int("radius", 15, "Rendering radius (rooms from center)")
 	roomSize := flag.Int("room-size", 20, "Room size in pixels")
 	roomSpacing := flag.Int("room-spacing", 25, "Room spacing in pixels")
 	quality := flag.Float64("quality", 85, "WEBP output quality (0-100)")
@@ -193,7 +192,6 @@ func main() {
 		cfg := maprenderer.DefaultConfig()
 		cfg.Width = *imgWidth
 		cfg.Height = *imgHeight
-		cfg.Radius = *radius
 		cfg.RoomSize = *roomSize
 		cfg.RoomSpacing = *roomSpacing
 		cfg.RoomRound = *roundRooms
@@ -246,7 +244,6 @@ func printUsage() {
 	fmt.Println("  -output string    Output file path (.webp or .png)")
 	fmt.Println("  -width int        Output image width (default 800)")
 	fmt.Println("  -height int       Output image height (default 600)")
-	fmt.Println("  -radius int       Rendering radius in rooms (default 15)")
 	fmt.Println("  -room-size int    Room size in pixels (default 20)")
 	fmt.Println("  -room-spacing int Room spacing in pixels (default 25)")
 	fmt.Println("  -quality float    WEBP quality 0-100 (default 85)")
@@ -257,5 +254,5 @@ func printUsage() {
 	fmt.Println("  mapsnap -map world.map -dump-json map.json")
 	fmt.Println("  mapsnap -map world.map -room 1234 -output map.webp")
 	fmt.Println("  mapsnap -map world.map -room 1234 -output map.png -width 1200 -height 900")
-	fmt.Println("  mapsnap -map world.map -room 1234 -output map.webp -radius 20 -round")
+	fmt.Println("  mapsnap -map world.map -room 1234 -output map.webp -room-size 15 -room-spacing 20")
 }

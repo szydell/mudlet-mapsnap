@@ -76,6 +76,9 @@ func (r *Renderer) RenderFragment(roomID int32) (*RenderResult, error) {
 	halfHeight := r.config.Height / 2
 	spacing := r.config.RoomSpacing
 
+	// Calculate how many rooms fit in each direction (rectangular, not circular)
+	rangeX, rangeY := r.config.CalculateVisibleRooms()
+
 	// Build custom environment colors map from map data
 	customEnvColors := make(map[int32]color.RGBA)
 	for envID, c := range r.mapData.CustomEnvColors {
@@ -84,7 +87,7 @@ func (r *Renderer) RenderFragment(roomID int32) (*RenderResult, error) {
 	}
 
 	// Collect rooms to render - ONLY from the same area
-	roomsToRender := r.collectRoomsInArea(centerX, centerY, centerZ, int32(r.config.Radius), areaID)
+	roomsToRender := r.collectRoomsInArea(centerX, centerY, centerZ, int32(rangeX), int32(rangeY), areaID)
 
 	// Build room lookup map
 	roomMap := make(map[int32]*mapparser.MudletRoom)
@@ -94,13 +97,13 @@ func (r *Renderer) RenderFragment(roomID int32) (*RenderResult, error) {
 
 	// Optionally draw lower level rooms (same area only)
 	if r.config.ShowLowerLevel {
-		lowerRooms := r.collectRoomsInArea(centerX, centerY, centerZ-1, int32(r.config.Radius), areaID)
+		lowerRooms := r.collectRoomsInArea(centerX, centerY, centerZ-1, int32(rangeX), int32(rangeY), areaID)
 		r.drawOtherLevelRooms(img, lowerRooms, centerX, centerY, halfWidth, halfHeight, spacing, true)
 	}
 
 	// Optionally draw upper level rooms (same area only)
 	if r.config.ShowUpperLevel {
-		upperRooms := r.collectRoomsInArea(centerX, centerY, centerZ+1, int32(r.config.Radius), areaID)
+		upperRooms := r.collectRoomsInArea(centerX, centerY, centerZ+1, int32(rangeX), int32(rangeY), areaID)
 		r.drawOtherLevelRooms(img, upperRooms, centerX, centerY, halfWidth, halfHeight, spacing, false)
 	}
 
@@ -154,8 +157,10 @@ func (r *Renderer) roomToScreen(room *mapparser.MudletRoom, centerX, centerY int
 	return halfWidth + dx*spacing, halfHeight - dy*spacing
 }
 
-// collectRoomsInArea returns all rooms within radius of center point, filtered by area and z-level
-func (r *Renderer) collectRoomsInArea(centerX, centerY, centerZ, radius, areaID int32) []*mapparser.MudletRoom {
+// collectRoomsInArea returns all rooms within rectangular range of center point,
+// filtered by area and z-level. rangeX and rangeY define how many rooms from
+// center to edge in each direction (creating a rectangular selection area).
+func (r *Renderer) collectRoomsInArea(centerX, centerY, centerZ, rangeX, rangeY, areaID int32) []*mapparser.MudletRoom {
 	var rooms []*mapparser.MudletRoom
 
 	for _, room := range r.mapData.Rooms {
@@ -171,8 +176,8 @@ func (r *Renderer) collectRoomsInArea(centerX, centerY, centerZ, radius, areaID 
 		dx := abs32(room.X - centerX)
 		dy := abs32(room.Y - centerY)
 
-		// Use Chebyshev distance (max of dx, dy) for square area
-		if dx <= radius && dy <= radius {
+		// Use rectangular bounds (separate X and Y ranges)
+		if dx <= rangeX && dy <= rangeY {
 			rooms = append(rooms, room)
 		}
 	}
