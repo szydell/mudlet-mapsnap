@@ -269,7 +269,7 @@ func TestWriteImageWEBP(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	opts := &OutputOptions{Format: FormatWEBP, Quality: 80}
+	opts := &OutputOptions{Format: FormatWEBP}
 	err = WriteImage(result.Image, &buf, opts)
 	if err != nil {
 		t.Fatalf("WriteImage WEBP failed: %v", err)

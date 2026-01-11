@@ -33,7 +33,6 @@ func main() {
 	imgHeight := flag.Int("height", 600, "Output image height")
 	roomSize := flag.Int("room-size", 20, "Room size in pixels")
 	roomSpacing := flag.Int("room-spacing", 25, "Room spacing in pixels")
-	quality := flag.Float64("quality", 85, "WEBP output quality (0-100)")
 	roundRooms := flag.Bool("round", false, "Draw rooms as circles")
 
 	// Parse flags
@@ -208,12 +207,7 @@ func main() {
 		}
 
 		// Save the output
-		outputOpts := &maprenderer.OutputOptions{
-			Format:  maprenderer.FormatFromPath(*outputFile),
-			Quality: float32(*quality),
-		}
-
-		if err := maprenderer.SaveImage(result.Image, *outputFile, outputOpts); err != nil {
+		if err := maprenderer.SaveImage(result.Image, *outputFile, nil); err != nil {
 			fmt.Printf("Error saving image: %v\n", err)
 			os.Exit(1)
 		}
@@ -246,7 +240,6 @@ func printUsage() {
 	fmt.Println("  -height int       Output image height (default 600)")
 	fmt.Println("  -room-size int    Room size in pixels (default 20)")
 	fmt.Println("  -room-spacing int Room spacing in pixels (default 25)")
-	fmt.Println("  -quality float    WEBP quality 0-100 (default 85)")
 	fmt.Println("  -round            Draw rooms as circles")
 	fmt.Println("\nExamples:")
 	fmt.Println("  mapsnap -map world.map -stats")

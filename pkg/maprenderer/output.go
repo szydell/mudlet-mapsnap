@@ -26,15 +26,12 @@ const (
 type OutputOptions struct {
 	// Format specifies the output image format.
 	Format OutputFormat
-	// Quality is reserved for future lossy WEBP support (currently unused).
-	Quality float32
 }
 
 // DefaultOutputOptions returns default output options (lossless WEBP).
 func DefaultOutputOptions() *OutputOptions {
 	return &OutputOptions{
-		Format:  FormatWEBP,
-		Quality: 85,
+		Format: FormatWEBP,
 	}
 }
 
